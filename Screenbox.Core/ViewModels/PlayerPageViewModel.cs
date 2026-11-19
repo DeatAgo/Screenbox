@@ -37,6 +37,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
     IRecipient<OverrideControlsHideDelayMessage>,
     IRecipient<DragDropMessage>,
     IRecipient<VisualizerChangedMessage>,
+    IRecipient<AudioOnlyModeChangedMessage>,
     IRecipient<PropertyChangedMessage<NavigationViewDisplayMode>>,
     IRecipient<PropertyChangedMessage<WindowViewMode>>
 {
@@ -121,6 +122,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
     private bool _resizeNext;
     private bool _isPlayPauseHoldActive;
     private double _playbackRateBeforeHold;
+    private bool _isAudioOnlyMode;
 
     public PlayerPageViewModel(IWindowService windowService,
         PlayerSettingsContext playerSettings, GeneralSettingsContext generalSettings,
@@ -164,6 +166,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
         Messenger.Register<OverrideControlsHideDelayMessage>(this);
         Messenger.Register<DragDropMessage>(this);
         Messenger.Register<VisualizerChangedMessage>(this);
+        Messenger.Register<AudioOnlyModeChangedMessage>(this);
         Messenger.Register<PropertyChangedMessage<NavigationViewDisplayMode>>(this);
         Messenger.Register<PropertyChangedMessage<WindowViewMode>>(this);
     }
@@ -177,6 +180,24 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
     {
         if (message.Path is null) return;
         ShowVisualizer = AudioOnly && !string.IsNullOrEmpty(message.Path);
+    }
+
+    public void Receive(AudioOnlyModeChangedMessage message)
+    {
+        _isAudioOnlyMode = message.Value;
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            UpdatePropertiesWithCurrentItem(Media);
+            if (AudioOnly)
+            {
+                _controlsVisibilityTimer.Stop();
+                ControlsHidden = false;
+            }
+            else if (IsPlaying)
+            {
+                DelayHideControls();
+            }
+        });
     }
 
     public void Receive(TogglePlayerVisibilityMessage message)
@@ -803,7 +824,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
     private void UpdatePropertiesWithCurrentItem(MediaViewModel? current)
     {
         Media = current;
-        AudioOnly = current == null || current.MediaType == MediaPlaybackType.Music;
+        AudioOnly = _isAudioOnlyMode || current == null || current.MediaType == MediaPlaybackType.Music;
         ShowVisualizer = current != null && AudioOnly && !string.IsNullOrEmpty(_playerSettings.LivelyActivePath);
         if (current != null)
         {
@@ -860,7 +881,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
 
     private void OnNaturalVideoSizeChanged(IMediaPlayer sender, EventArgs args)
     {
-        if (!_resizeNext && _playerSettings.AutoResize != PlayerAutoResizeOption.Always) return;
+        if (_isAudioOnlyMode || (!_resizeNext && _playerSettings.AutoResize != PlayerAutoResizeOption.Always)) return;
         _resizeNext = false;
 
         _dispatcherQueue.TryEnqueue(() =>

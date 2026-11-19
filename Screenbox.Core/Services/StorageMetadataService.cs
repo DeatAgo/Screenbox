@@ -1,11 +1,14 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Screenbox.Core.Contexts;
 using Screenbox.Core.Enums;
 using Screenbox.Core.Helpers;
 using Screenbox.Core.MediaSources;
 using Screenbox.Core.Models;
+using Screenbox.Core.Playback;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 using IMediaSource = Screenbox.Core.MediaSources.IMediaSource;
@@ -13,23 +16,40 @@ using IMediaSource = Screenbox.Core.MediaSources.IMediaSource;
 namespace Screenbox.Core.Services;
 
 /// <summary>
-/// Fast source metadata service backed by Windows Storage file properties (WinRT).
+/// Fast source metadata service backed by Windows Storage file properties (WinRT),
+/// with LibVLC fallback when container duration is unavailable via WinRT.
 /// </summary>
 public sealed class StorageMetadataService : ISourceMetadataService
 {
+    private readonly PlayerContext? _playerContext;
+    private readonly IPlayerService? _playerService;
+    private readonly IPlaybackMetadataService? _playbackMetadataService;
+    private readonly IMediaSourceFactory? _mediaSourceFactory;
     private readonly ILogger<StorageMetadataService> _logger;
 
     public StorageMetadataService(ILogger<StorageMetadataService> logger)
+        : this(null, null, null, null, logger)
     {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public StorageMetadataService(
+        PlayerContext? playerContext,
+        IPlayerService? playerService,
+        IPlaybackMetadataService? playbackMetadataService,
+        IMediaSourceFactory? mediaSourceFactory,
+        ILogger<StorageMetadataService> logger)
+    {
+        _playerContext = playerContext;
+        _playerService = playerService;
+        _playbackMetadataService = playbackMetadataService;
+        _mediaSourceFactory = mediaSourceFactory;
         _logger = logger;
     }
 
     /// <summary>
     /// Retrieves Windows Storage properties from the specified <paramref name="file"/>.
     /// </summary>
-    /// <param name="file">The storage file to inspect.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A populated <see cref="MediaInfo"/>, or <see langword="null"/> if the operation was canceled.</returns>
     public async Task<MediaInfo?> GetMediaInfoAsync(
         StorageFile file,
         CancellationToken cancellationToken = default)
@@ -42,6 +62,7 @@ public sealed class StorageMetadataService : ISourceMetadataService
             return new MediaInfo(mediaType);
         }
 
+        MediaInfo? info = null;
         try
         {
             BasicProperties basicProperties = await file.GetBasicPropertiesAsync();
@@ -51,11 +72,13 @@ public sealed class StorageMetadataService : ISourceMetadataService
             {
                 case MediaPlaybackType.Video:
                     VideoProperties videoProperties = await file.Properties.GetVideoPropertiesAsync();
-                    return new MediaInfo(basicProperties, videoProperties);
+                    info = new MediaInfo(basicProperties, videoProperties);
+                    break;
 
                 case MediaPlaybackType.Music:
                     MusicProperties musicProperties = await file.Properties.GetMusicPropertiesAsync();
-                    return new MediaInfo(basicProperties, musicProperties);
+                    info = new MediaInfo(basicProperties, musicProperties);
+                    break;
             }
         }
         catch (OperationCanceledException)
@@ -64,28 +87,31 @@ public sealed class StorageMetadataService : ISourceMetadataService
         }
         catch (Exception e) when (IsExpectedStoragePropertiesHResult(e.HResult))
         {
-            // Expected transient WinRT failures while querying StorageFile properties:
-            //   0x800706BA RPC_S_SERVER_UNAVAILABLE - the RPC server is unavailable.
-            //   0x8000000E E_ILLEGAL_METHOD_CALL    - file's property provider isn't ready
-            //                                         (file became unavailable after IsAvailable,
-            //                                          app suspended, or item disposed).
-            //   0x80070490 ERROR_NOT_FOUND          - element not found.
-            // These are already handled by returning a default MediaInfo; don't report to Sentry.
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to load media metadata for file type '{FileType}'.", file.FileType);
         }
 
-        return new MediaInfo(mediaType);
+        info ??= new MediaInfo(mediaType);
+
+        if (HasMissingDuration(info) && _mediaSourceFactory is not null)
+        {
+            IMediaSource source = _mediaSourceFactory.Create(file);
+            MediaInfo? vlcInfo = await TryParseWithLibVlcAsync(source, cancellationToken);
+            if (vlcInfo is not null)
+            {
+                vlcInfo.MediaType = mediaType;
+                info = info.MergeSelective(vlcInfo);
+            }
+        }
+
+        return info;
     }
 
     /// <summary>
     /// Retrieves Windows Storage properties from the specified <paramref name="fileSource"/>.
     /// </summary>
-    /// <param name="fileSource">The file media source to inspect.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A populated <see cref="MediaInfo"/>, or <see langword="null"/> if the file could not be resolved or the operation was canceled.</returns>
     public async Task<MediaInfo?> GetMediaInfoAsync(
         IFileMediaSource fileSource,
         CancellationToken cancellationToken = default)
@@ -113,6 +139,46 @@ public sealed class StorageMetadataService : ISourceMetadataService
         }
 
         return null;
+    }
+
+    private static bool HasMissingDuration(MediaInfo info) =>
+        info.MediaType switch
+        {
+            MediaPlaybackType.Video => info.VideoProperties.Duration <= TimeSpan.Zero,
+            MediaPlaybackType.Music => info.MusicProperties.Duration <= TimeSpan.Zero,
+            _ => false
+        };
+
+    private async Task<MediaInfo?> TryParseWithLibVlcAsync(IMediaSource source, CancellationToken cancellationToken)
+    {
+        IMediaPlayer? player = _playerContext?.MediaPlayer;
+        if (player is null || _playerService is null || _playbackMetadataService is null)
+        {
+            return null;
+        }
+
+        IPlaybackItem? item = null;
+        try
+        {
+            item = _playerService.CreatePlaybackItem(player, source, ":no-video");
+            return await _playbackMetadataService.GetMediaInfoAsync(item, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "LibVLC metadata fallback failed for '{Location}'.", source.Location);
+            return null;
+        }
+        finally
+        {
+            if (item is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
     }
 
     private static bool IsExpectedStoragePropertiesHResult(int hresult)

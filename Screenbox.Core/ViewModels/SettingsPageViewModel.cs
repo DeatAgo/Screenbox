@@ -17,12 +17,17 @@ using Windows.Devices.Enumeration;
 using Windows.Storage;
 using Windows.Storage.AccessCache;
 using Windows.System;
+using Windows.UI;
+using Windows.UI.Text;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Media;
 
 namespace Screenbox.Core.ViewModels;
 
 public sealed partial class SettingsPageViewModel : ObservableRecipient
 {
+    private const string PropertiesDockModeKey = "Player.PropertiesDockMode";
+
     public PlayerSettingsContext PlayerSettings { get; }
     public LibrarySettingsContext LibrarySettings { get; }
     public PlaybackSettingsContext PlaybackSettings { get; }
@@ -36,6 +41,7 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
     [ObservableProperty] public partial string GlobalArguments { get; set; } = string.Empty;
     [ObservableProperty] public partial bool IsRelaunchRequired { get; set; }
     [ObservableProperty] public partial StorageFolder? FrameCaptureFolder { get; set; }
+    [ObservableProperty] public partial int PropertiesDockMode { get; set; }
 
     public ObservableCollection<StorageFolder> MusicLocations { get; }
 
@@ -52,6 +58,50 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
     public IReadOnlyList<int> PlayerControlsHideDelayOptions { get; } = new[] { 1, 2, 3, 4, 5 };
 
     public IReadOnlyList<PlaybackActionKind> GestureOptions { get; } = Enum.GetValues<PlaybackActionKind>();
+
+    public IReadOnlyList<string> SubtitleFontOptions { get; } = SystemFontHelper.GetInstalledFontFamilies();
+
+    public IReadOnlyList<string> SubtitleLanguageOptions { get; } = new[]
+    {
+        "Default",
+        "None",
+        "English (en)",
+        "Japanese (ja)",
+        "Chinese (zh)",
+        "Korean (ko)",
+        "Spanish (es)",
+        "French (fr)",
+        "German (de)",
+        "Portuguese (pt)",
+        "Russian (ru)",
+        "Arabic (ar)",
+        "Hindi (hi)",
+        "Vietnamese (vi)",
+        "Thai (th)",
+        "Indonesian (id)",
+        "Custom..."
+    };
+
+    private static readonly string[] SubtitleLanguageModeValues =
+    [
+        "default",
+        "none",
+        "en",
+        "ja",
+        "zh",
+        "ko",
+        "es",
+        "fr",
+        "de",
+        "pt",
+        "ru",
+        "ar",
+        "hi",
+        "vi",
+        "th",
+        "id",
+        "custom"
+    ];
 
     private static readonly int[] _volumeOptions = [100, 125, 150, 200];
 
@@ -119,11 +169,503 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
         AdvancedMode = PlayerSettings.AdvancedMode;
         VideoUpscaling = (int)PlayerSettings.VideoUpscale;
         GlobalArguments = PlayerSettings.GlobalArguments;
+        PropertiesDockMode = GetPropertiesDockMode() switch
+        {
+            Core.Enums.PropertiesDockMode.Left => 1,
+            Core.Enums.PropertiesDockMode.Right => 2,
+            _ => 0
+        };
 
         // Setting initial values for relaunch check
         _initialValues ??= new InitialValues(GlobalArguments, AdvancedMode, VideoUpscaling, Language);
         CheckForRelaunch();
     }
+
+    public static PropertiesDockMode GetPropertiesDockMode()
+    {
+        if (ApplicationData.Current.LocalSettings.Values.TryGetValue(PropertiesDockModeKey, out object? raw) &&
+            raw is string modeName &&
+            Enum.TryParse<PropertiesDockMode>(modeName, out var parsed))
+        {
+            return parsed;
+        }
+
+        return Core.Enums.PropertiesDockMode.Floating;
+    }
+
+    public static void SetPropertiesDockMode(PropertiesDockMode mode)
+    {
+        ApplicationData.Current.LocalSettings.Values[PropertiesDockModeKey] = mode.ToString();
+    }
+
+    partial void OnPropertiesDockModeChanged(int value)
+    {
+        PropertiesDockMode mode = value switch
+        {
+            1 => Core.Enums.PropertiesDockMode.Left,
+            2 => Core.Enums.PropertiesDockMode.Right,
+            _ => Core.Enums.PropertiesDockMode.Floating
+        };
+        SetPropertiesDockMode(mode);
+    }
+
+    public int SelectedSubtitleLanguageIndex
+    {
+        get
+        {
+            int idx = Array.IndexOf(SubtitleLanguageModeValues, PlayerSettings.SubtitlePreferredLanguageMode);
+            return idx >= 0 ? idx : 0;
+        }
+        set
+        {
+            if (value < 0 || value >= SubtitleLanguageModeValues.Length) return;
+            string mode = SubtitleLanguageModeValues[value];
+            if (PlayerSettings.SubtitlePreferredLanguageMode == mode) return;
+            PlayerSettings.SubtitlePreferredLanguageMode = mode;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsCustomSubtitleLanguageVisible));
+        }
+    }
+
+    public Visibility IsCustomSubtitleLanguageVisible =>
+        string.Equals(PlayerSettings.SubtitlePreferredLanguageMode, "custom", StringComparison.OrdinalIgnoreCase)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string SubtitlePreferredLanguageCode
+    {
+        get => PlayerSettings.SubtitlePreferredLanguageCode;
+        set
+        {
+            string trimmed = value?.Trim() ?? string.Empty;
+            if (PlayerSettings.SubtitlePreferredLanguageCode == trimmed) return;
+            PlayerSettings.SubtitlePreferredLanguageCode = trimmed;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool SubtitleAllowEmbeddedFormatting
+    {
+        get => PlayerSettings.SubtitleAllowEmbeddedFormatting;
+        set
+        {
+            if (PlayerSettings.SubtitleAllowEmbeddedFormatting == value) return;
+            PlayerSettings.SubtitleAllowEmbeddedFormatting = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string SubtitleFontFamily
+    {
+        get => PlayerSettings.SubtitleFontFamily;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value) || PlayerSettings.SubtitleFontFamily == value) return;
+            PlayerSettings.SubtitleFontFamily = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PreviewFontFamily));
+        }
+    }
+
+    public double SubtitleTextScale
+    {
+        get => Math.Clamp(PlayerSettings.SubtitleTextScale, 50, 250);
+        set
+        {
+            int scale = Math.Clamp((int)Math.Round(value), 50, 250);
+            if (PlayerSettings.SubtitleTextScale == scale) return;
+            PlayerSettings.SubtitleTextScale = scale;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleTextScaleLabel));
+            OnPropertyChanged(nameof(PreviewFontSize));
+        }
+    }
+
+    public string SubtitleTextScaleLabel => $"{Math.Clamp(PlayerSettings.SubtitleTextScale, 50, 250)}%";
+
+    public double SubtitleMargin
+    {
+        get => Math.Clamp(PlayerSettings.SubtitleMargin, 0, 200);
+        set
+        {
+            int margin = Math.Clamp((int)Math.Round(value), 0, 200);
+            if (PlayerSettings.SubtitleMargin == margin) return;
+            PlayerSettings.SubtitleMargin = margin;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleMarginLabel));
+            OnPropertyChanged(nameof(PreviewSubtitleMargin));
+        }
+    }
+
+    public string SubtitleMarginLabel => $"{Math.Clamp(PlayerSettings.SubtitleMargin, 0, 200)} px";
+
+    public int SubtitleAlignment
+    {
+        get => Math.Clamp(PlayerSettings.SubtitleAlignment, 0, 2);
+        set
+        {
+            int align = Math.Clamp(value, 0, 2);
+            if (PlayerSettings.SubtitleAlignment == align) return;
+            PlayerSettings.SubtitleAlignment = align;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PreviewHorizontalAlignment));
+            OnPropertyChanged(nameof(PreviewTextAlignment));
+        }
+    }
+
+    public HorizontalAlignment PreviewHorizontalAlignment => PlayerSettings.SubtitleAlignment switch
+    {
+        1 => HorizontalAlignment.Left,
+        2 => HorizontalAlignment.Right,
+        _ => HorizontalAlignment.Center
+    };
+
+    public TextAlignment PreviewTextAlignment => PlayerSettings.SubtitleAlignment switch
+    {
+        1 => TextAlignment.Left,
+        2 => TextAlignment.Right,
+        _ => TextAlignment.Center
+    };
+
+    public Color SubtitleTextColor
+    {
+        get => RgbToColor(PlayerSettings.SubtitleColor, 255);
+        set
+        {
+            int rgb = ColorToRgb(value);
+            if (PlayerSettings.SubtitleColor == rgb) return;
+            PlayerSettings.SubtitleColor = rgb;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleTextSwatchBrush));
+            OnPropertyChanged(nameof(PreviewForegroundBrush));
+        }
+    }
+
+    public SolidColorBrush SubtitleTextSwatchBrush => new(RgbToColor(PlayerSettings.SubtitleColor, 255));
+
+    public double SubtitleTextOpacityPercent
+    {
+        get => Math.Round(Math.Clamp(PlayerSettings.SubtitleOpacity, 0, 255) * 100.0 / 255.0);
+        set
+        {
+            int alpha = Math.Clamp((int)Math.Round(value * 255.0 / 100.0), 0, 255);
+            if (PlayerSettings.SubtitleOpacity == alpha) return;
+            PlayerSettings.SubtitleOpacity = alpha;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleTextOpacityLabel));
+            OnPropertyChanged(nameof(PreviewForegroundBrush));
+        }
+    }
+
+    public string SubtitleTextOpacityLabel => $"{(int)SubtitleTextOpacityPercent}%";
+
+    public Color SubtitleBackgroundColor
+    {
+        get => RgbToColor(PlayerSettings.SubtitleBackgroundColor, 255);
+        set
+        {
+            int rgb = ColorToRgb(value);
+            if (PlayerSettings.SubtitleBackgroundColor == rgb) return;
+            PlayerSettings.SubtitleBackgroundColor = rgb;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleBackgroundSwatchBrush));
+            OnPropertyChanged(nameof(PreviewBackgroundBrush));
+        }
+    }
+
+    public SolidColorBrush SubtitleBackgroundSwatchBrush => new(RgbToColor(PlayerSettings.SubtitleBackgroundColor, 255));
+
+    public double SubtitleBackgroundOpacityPercent
+    {
+        get => Math.Round(Math.Clamp(PlayerSettings.SubtitleBackgroundOpacity, 0, 255) * 100.0 / 255.0);
+        set
+        {
+            int alpha = Math.Clamp((int)Math.Round(value * 255.0 / 100.0), 0, 255);
+            if (PlayerSettings.SubtitleBackgroundOpacity == alpha) return;
+            PlayerSettings.SubtitleBackgroundOpacity = alpha;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleBackgroundOpacityLabel));
+            OnPropertyChanged(nameof(PreviewBackgroundBrush));
+        }
+    }
+
+    public string SubtitleBackgroundOpacityLabel => $"{(int)SubtitleBackgroundOpacityPercent}%";
+
+    public double SubtitleOutlineThickness
+    {
+        get => Math.Clamp(PlayerSettings.SubtitleOutlineThickness, 0, 6);
+        set
+        {
+            int thickness = Math.Clamp((int)Math.Round(value), 0, 6);
+            if (PlayerSettings.SubtitleOutlineThickness == thickness) return;
+            PlayerSettings.SubtitleOutlineThickness = thickness;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleOutlineThicknessLabel));
+            OnPropertyChanged(nameof(PreviewOutlineVisibility));
+            OnPropertyChanged(nameof(PreviewOutlineMarginLeft));
+            OnPropertyChanged(nameof(PreviewOutlineMarginRight));
+            OnPropertyChanged(nameof(PreviewOutlineMarginTop));
+            OnPropertyChanged(nameof(PreviewOutlineMarginBottom));
+        }
+    }
+
+    public string SubtitleOutlineThicknessLabel => PlayerSettings.SubtitleOutlineThickness switch
+    {
+        0 => "None",
+        <= 2 => $"Thin ({PlayerSettings.SubtitleOutlineThickness})",
+        <= 4 => $"Medium ({PlayerSettings.SubtitleOutlineThickness})",
+        _ => $"Thick ({PlayerSettings.SubtitleOutlineThickness})"
+    };
+
+    public Color SubtitleOutlineColor
+    {
+        get => RgbToColor(PlayerSettings.SubtitleOutlineColor, 255);
+        set
+        {
+            int rgb = ColorToRgb(value);
+            if (PlayerSettings.SubtitleOutlineColor == rgb) return;
+            PlayerSettings.SubtitleOutlineColor = rgb;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleOutlineSwatchBrush));
+            OnPropertyChanged(nameof(PreviewOutlineBrush));
+        }
+    }
+
+    public SolidColorBrush SubtitleOutlineSwatchBrush => new(RgbToColor(PlayerSettings.SubtitleOutlineColor, 255));
+
+    public double SubtitleOutlineOpacityPercent
+    {
+        get => Math.Round(Math.Clamp(PlayerSettings.SubtitleOutlineOpacity, 0, 255) * 100.0 / 255.0);
+        set
+        {
+            int alpha = Math.Clamp((int)Math.Round(value * 255.0 / 100.0), 0, 255);
+            if (PlayerSettings.SubtitleOutlineOpacity == alpha) return;
+            PlayerSettings.SubtitleOutlineOpacity = alpha;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleOutlineOpacityLabel));
+            OnPropertyChanged(nameof(PreviewOutlineBrush));
+        }
+    }
+
+    public string SubtitleOutlineOpacityLabel => $"{(int)SubtitleOutlineOpacityPercent}%";
+
+    public bool SubtitleShadow
+    {
+        get => PlayerSettings.SubtitleShadow;
+        set
+        {
+            if (PlayerSettings.SubtitleShadow == value) return;
+            PlayerSettings.SubtitleShadow = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PreviewShadowVisibility));
+        }
+    }
+
+    public Color SubtitleShadowColor
+    {
+        get => RgbToColor(PlayerSettings.SubtitleShadowColor, 255);
+        set
+        {
+            int rgb = ColorToRgb(value);
+            if (PlayerSettings.SubtitleShadowColor == rgb) return;
+            PlayerSettings.SubtitleShadowColor = rgb;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleShadowSwatchBrush));
+            OnPropertyChanged(nameof(PreviewShadowBrush));
+        }
+    }
+
+    public SolidColorBrush SubtitleShadowSwatchBrush => new(RgbToColor(PlayerSettings.SubtitleShadowColor, 255));
+
+    public double SubtitleShadowAngle
+    {
+        get => Math.Clamp(PlayerSettings.SubtitleShadowAngle, 0, 360);
+        set
+        {
+            int angle = Math.Clamp((int)Math.Round(value), 0, 360);
+            if (PlayerSettings.SubtitleShadowAngle == angle) return;
+            PlayerSettings.SubtitleShadowAngle = angle;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleShadowAngleLabel));
+            OnPropertyChanged(nameof(PreviewShadowMargin));
+        }
+    }
+
+    public string SubtitleShadowAngleLabel => $"{Math.Clamp(PlayerSettings.SubtitleShadowAngle, 0, 360)}°";
+
+    public double SubtitleShadowDistance
+    {
+        get => Math.Clamp(PlayerSettings.SubtitleShadowDistance, 0, 20);
+        set
+        {
+            int distance = Math.Clamp((int)Math.Round(value), 0, 20);
+            if (PlayerSettings.SubtitleShadowDistance == distance) return;
+            PlayerSettings.SubtitleShadowDistance = distance;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SubtitleShadowDistanceLabel));
+            OnPropertyChanged(nameof(PreviewShadowMargin));
+        }
+    }
+
+    public string SubtitleShadowDistanceLabel => $"{Math.Clamp(PlayerSettings.SubtitleShadowDistance, 0, 20) / 100.0:0.00}";
+
+    public bool SubtitleBold
+    {
+        get => PlayerSettings.SubtitleBold;
+        set
+        {
+            if (PlayerSettings.SubtitleBold == value) return;
+            PlayerSettings.SubtitleBold = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PreviewFontWeight));
+        }
+    }
+
+    public Thickness PreviewSubtitleMargin => new(0, 0, 0, Math.Clamp(PlayerSettings.SubtitleMargin, 0, 200) * 0.25);
+
+    public FontFamily PreviewFontFamily
+    {
+        get
+        {
+            try
+            {
+                return new FontFamily(PlayerSettings.SubtitleFontFamily);
+            }
+            catch
+            {
+                return new FontFamily("Segoe UI");
+            }
+        }
+    }
+
+    public double PreviewFontSize => 14.0 * (Math.Clamp(PlayerSettings.SubtitleTextScale, 50, 250) / 100.0);
+
+    public SolidColorBrush PreviewForegroundBrush =>
+        new(RgbToColor(PlayerSettings.SubtitleColor, (byte)Math.Clamp(PlayerSettings.SubtitleOpacity, 0, 255)));
+
+    public SolidColorBrush PreviewBackgroundBrush =>
+        new(RgbToColor(PlayerSettings.SubtitleBackgroundColor, (byte)Math.Clamp(PlayerSettings.SubtitleBackgroundOpacity, 0, 255)));
+
+    public SolidColorBrush PreviewOutlineBrush =>
+        new(RgbToColor(PlayerSettings.SubtitleOutlineColor, (byte)Math.Clamp(PlayerSettings.SubtitleOutlineOpacity, 0, 255)));
+
+    public SolidColorBrush PreviewShadowBrush =>
+        new(RgbToColor(PlayerSettings.SubtitleShadowColor, 180));
+
+    public Visibility PreviewOutlineVisibility =>
+        PlayerSettings.SubtitleOutlineThickness > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility PreviewShadowVisibility =>
+        PlayerSettings.SubtitleShadow ? Visibility.Visible : Visibility.Collapsed;
+
+    public Thickness PreviewShadowMargin
+    {
+        get
+        {
+            double radians = Math.Clamp(PlayerSettings.SubtitleShadowAngle, 0, 360) * Math.PI / 180.0;
+            double dist = Math.Clamp(PlayerSettings.SubtitleShadowDistance, 0, 20) * 0.35;
+            double dx = Math.Cos(radians) * dist;
+            double dy = -Math.Sin(radians) * dist;
+            return new Thickness(dx, dy, -dx, -dy);
+        }
+    }
+
+    private double PreviewOutlineStep => Math.Clamp(PlayerSettings.SubtitleOutlineThickness, 0, 6) * 0.45;
+
+    public Thickness PreviewOutlineMarginLeft => new(-PreviewOutlineStep, 0, PreviewOutlineStep, 0);
+    public Thickness PreviewOutlineMarginRight => new(PreviewOutlineStep, 0, -PreviewOutlineStep, 0);
+    public Thickness PreviewOutlineMarginTop => new(0, -PreviewOutlineStep, 0, PreviewOutlineStep);
+    public Thickness PreviewOutlineMarginBottom => new(0, PreviewOutlineStep, 0, -PreviewOutlineStep);
+
+    public FontWeight PreviewFontWeight =>
+        PlayerSettings.SubtitleBold ? FontWeights.Bold : FontWeights.Normal;
+
+    [RelayCommand]
+    private void ResetSubtitleAppearance()
+    {
+        PlayerSettings.SubtitlePreferredLanguageMode = "default";
+        PlayerSettings.SubtitlePreferredLanguageCode = string.Empty;
+        PlayerSettings.SubtitleAllowEmbeddedFormatting = true;
+        PlayerSettings.SubtitleFontFamily = "Segoe UI";
+        PlayerSettings.SubtitleTextScale = 100;
+        PlayerSettings.SubtitleMargin = 0;
+        PlayerSettings.SubtitleAlignment = 0;
+        PlayerSettings.SubtitleColor = 16777215;
+        PlayerSettings.SubtitleOpacity = 255;
+        PlayerSettings.SubtitleBackgroundColor = 0;
+        PlayerSettings.SubtitleBackgroundOpacity = 128;
+        PlayerSettings.SubtitleOutlineThickness = 2;
+        PlayerSettings.SubtitleOutlineColor = 0;
+        PlayerSettings.SubtitleOutlineOpacity = 255;
+        PlayerSettings.SubtitleShadow = false;
+        PlayerSettings.SubtitleShadowColor = 0;
+        PlayerSettings.SubtitleShadowAngle = 45;
+        PlayerSettings.SubtitleShadowDistance = 4;
+        PlayerSettings.SubtitleBold = false;
+
+        OnPropertyChanged(nameof(SelectedSubtitleLanguageIndex));
+        OnPropertyChanged(nameof(IsCustomSubtitleLanguageVisible));
+        OnPropertyChanged(nameof(SubtitlePreferredLanguageCode));
+        OnPropertyChanged(nameof(SubtitleAllowEmbeddedFormatting));
+        OnPropertyChanged(nameof(SubtitleFontFamily));
+        OnPropertyChanged(nameof(SubtitleTextScale));
+        OnPropertyChanged(nameof(SubtitleTextScaleLabel));
+        OnPropertyChanged(nameof(SubtitleMargin));
+        OnPropertyChanged(nameof(SubtitleMarginLabel));
+        OnPropertyChanged(nameof(SubtitleAlignment));
+        OnPropertyChanged(nameof(SubtitleTextColor));
+        OnPropertyChanged(nameof(SubtitleTextSwatchBrush));
+        OnPropertyChanged(nameof(SubtitleTextOpacityPercent));
+        OnPropertyChanged(nameof(SubtitleTextOpacityLabel));
+        OnPropertyChanged(nameof(SubtitleBackgroundColor));
+        OnPropertyChanged(nameof(SubtitleBackgroundSwatchBrush));
+        OnPropertyChanged(nameof(SubtitleBackgroundOpacityPercent));
+        OnPropertyChanged(nameof(SubtitleBackgroundOpacityLabel));
+        OnPropertyChanged(nameof(SubtitleOutlineThickness));
+        OnPropertyChanged(nameof(SubtitleOutlineThicknessLabel));
+        OnPropertyChanged(nameof(SubtitleOutlineColor));
+        OnPropertyChanged(nameof(SubtitleOutlineSwatchBrush));
+        OnPropertyChanged(nameof(SubtitleOutlineOpacityPercent));
+        OnPropertyChanged(nameof(SubtitleOutlineOpacityLabel));
+        OnPropertyChanged(nameof(SubtitleShadow));
+        OnPropertyChanged(nameof(SubtitleShadowColor));
+        OnPropertyChanged(nameof(SubtitleShadowSwatchBrush));
+        OnPropertyChanged(nameof(SubtitleShadowAngle));
+        OnPropertyChanged(nameof(SubtitleShadowAngleLabel));
+        OnPropertyChanged(nameof(SubtitleShadowDistance));
+        OnPropertyChanged(nameof(SubtitleShadowDistanceLabel));
+        OnPropertyChanged(nameof(SubtitleBold));
+
+        OnPropertyChanged(nameof(PreviewSubtitleMargin));
+        OnPropertyChanged(nameof(PreviewHorizontalAlignment));
+        OnPropertyChanged(nameof(PreviewTextAlignment));
+        OnPropertyChanged(nameof(PreviewFontFamily));
+        OnPropertyChanged(nameof(PreviewFontSize));
+        OnPropertyChanged(nameof(PreviewForegroundBrush));
+        OnPropertyChanged(nameof(PreviewBackgroundBrush));
+        OnPropertyChanged(nameof(PreviewOutlineBrush));
+        OnPropertyChanged(nameof(PreviewShadowBrush));
+        OnPropertyChanged(nameof(PreviewOutlineVisibility));
+        OnPropertyChanged(nameof(PreviewOutlineMarginLeft));
+        OnPropertyChanged(nameof(PreviewOutlineMarginRight));
+        OnPropertyChanged(nameof(PreviewOutlineMarginTop));
+        OnPropertyChanged(nameof(PreviewOutlineMarginBottom));
+        OnPropertyChanged(nameof(PreviewShadowVisibility));
+        OnPropertyChanged(nameof(PreviewShadowMargin));
+        OnPropertyChanged(nameof(PreviewFontWeight));
+    }
+
+    private static Color RgbToColor(int rgb, byte alpha)
+    {
+        int masked = rgb & 0x00FFFFFF;
+        return Color.FromArgb(
+            alpha,
+            (byte)((masked >> 16) & 0xFF),
+            (byte)((masked >> 8) & 0xFF),
+            (byte)(masked & 0xFF));
+    }
+
+    private static int ColorToRgb(Color color) => (color.R << 16) | (color.G << 8) | color.B;
 
     partial void OnLanguageChanged(string value)
     {
@@ -197,8 +739,6 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
         }
         catch (Exception)
         {
-            // System.Exception: The remote procedure call was cancelled.
-            // pass
         }
     }
 
@@ -219,8 +759,6 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
         }
         catch (Exception)
         {
-            // System.Exception: The remote procedure call was cancelled.
-            // pass
         }
     }
 
@@ -230,7 +768,6 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
         StorageFolder? folder = await _filesService.PickFolderAsync();
         if (folder is null) return;
 
-        // Release the previous entry so the FutureAccessList (capped at 1000 items) doesn't accumulate stale folders.
         string oldToken = PlayerSettings.FrameCaptureFolderToken;
         if (!string.IsNullOrEmpty(oldToken) && StorageApplicationPermissions.FutureAccessList.ContainsItem(oldToken))
         {
@@ -281,7 +818,6 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
         }
         catch (Exception)
         {
-            // pass
         }
     }
 
@@ -417,31 +953,15 @@ public sealed partial class SettingsPageViewModel : ObservableRecipient
     {
         if (_initialValues == null) return;
 
-        // Check if upscaling mode has been changed
         bool upscalingChanged = _initialValues.VideoUpscaling != VideoUpscaling;
-
-        // Check if app language has been changed
         bool languageChanged = _initialValues.Language != Language;
-
-        // Check if global arguments have been changed
         bool argsChanged = _initialValues.GlobalArguments != GlobalArguments;
-
-        // Check if advanced mode has been changed
         bool modeChanged = _initialValues.AdvancedMode != AdvancedMode;
-
-        // Check if there are any global arguments set
         bool hasArgs = GlobalArguments.Length > 0;
-
-        // Check if advanced mode is on, and if global arguments are set
         bool whenOn = modeChanged && AdvancedMode && hasArgs;
-
-        // Check if advanced mode is off, and if global arguments are set or have been removed
         bool whenOff = modeChanged && !AdvancedMode && ((!hasArgs && argsChanged) || hasArgs);
-
-        // Require relaunch when advanced mode is on and global arguments have been changed
         bool whenOnAndChanged = AdvancedMode && argsChanged;
 
-        // Combine everything
         IsRelaunchRequired = upscalingChanged || languageChanged || whenOn || whenOff || whenOnAndChanged;
     }
 }

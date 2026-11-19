@@ -14,6 +14,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:media="using:Microsoft.UI.Xaml.Media"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:primitives="using:Windows.UI.Xaml.Controls.Primitives"
     xmlns:sbuc="using:Screenbox.UI.Controls"
     xmlns:strings="using:Screenbox.Strings"
     xmlns:triggers="using:Screenbox.Triggers"
@@ -96,549 +97,732 @@
         </ResourceDictionary>
     </Page.Resources>
 
-    <Grid
-        x:Name="LayoutRoot"
-        KeyboardAcceleratorPlacementMode="Hidden"
-        PointerMoved="{x:Bind ViewModel.OnPointerMoved}"
-        PreviewKeyDown="LayoutRoot_OnPreviewKeyDown"
-        PreviewKeyUp="LayoutRoot_OnPreviewKeyUp"
-        Translation="0,0,32">
-        <Grid.Transitions>
-            <TransitionCollection>
-                <PaneThemeTransition Edge="Bottom" />
-            </TransitionCollection>
-        </Grid.Transitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="FirstColumn" Width="*" />
-            <ColumnDefinition x:Name="SecondColumn" Width="0" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <Grid.KeyboardAccelerators>
-            <!--  Volume  -->
-            <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPlus}" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Add" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemMinus}" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Subtract" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Up" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Down" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
-            <!--  Seek  -->
-            <KeyboardAccelerator Key="Left" Invoked="SeekKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator
-                Key="Left"
-                Invoked="SeekKeyboardAccelerator_OnInvoked"
-                Modifiers="Control" />
-            <KeyboardAccelerator
-                Key="Left"
-                Invoked="SeekKeyboardAccelerator_OnInvoked"
-                Modifiers="Shift" />
-            <KeyboardAccelerator Key="Right" Invoked="SeekKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator
-                Key="Right"
-                Invoked="SeekKeyboardAccelerator_OnInvoked"
-                Modifiers="Control" />
-            <KeyboardAccelerator
-                Key="Right"
-                Invoked="SeekKeyboardAccelerator_OnInvoked"
-                Modifiers="Shift" />
-            <KeyboardAccelerator Key="J" Invoked="SeekKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="L" Invoked="SeekKeyboardAccelerator_OnInvoked" />
-            <!--  Frame stepping  -->
-            <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPeriod}" Invoked="FrameSteppingKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemComma}" Invoked="FrameSteppingKeyboardAccelerator_OnInvoked" />
-            <!--  Playback speed  -->
-            <KeyboardAccelerator
-                Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPeriod}"
-                Invoked="PlaybackRateKeyboardAccelerator_OnInvoked"
-                Modifiers="Shift" />
-            <KeyboardAccelerator
-                Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemComma}"
-                Invoked="PlaybackRateKeyboardAccelerator_OnInvoked"
-                Modifiers="Shift" />
-            <!--  Window resize  -->
-            <KeyboardAccelerator
-                Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPlus}"
-                Invoked="WindowResizeKeyboardAccelerator_OnInvoked"
-                Modifiers="Control" />
-            <KeyboardAccelerator
-                Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemMinus}"
-                Invoked="WindowResizeKeyboardAccelerator_OnInvoked"
-                Modifiers="Control" />
-            <KeyboardAccelerator Key="Number1" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Number2" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Number3" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Number4" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
-            <!--  Seek to percentage  -->
-            <KeyboardAccelerator Key="NumberPad0" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad1" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad2" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad3" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad4" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad5" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad6" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad7" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad8" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="NumberPad9" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="Home" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <KeyboardAccelerator Key="End" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
-            <!--  Escape key handling  -->
-            <KeyboardAccelerator
-                Key="Escape"
-                Invoked="EscapeKeyboardAccelerator_OnInvoked"
-                IsEnabled="{x:Bind ViewModel.IsPlayerVisibilityVisible, Mode=OneWay}" />
-        </Grid.KeyboardAccelerators>
-
-        <Button
-            x:Name="MiniPlayerTitleButton"
-            Grid.Column="1"
-            Margin="16,0,10,0"
-            Padding="0"
-            AutomationProperties.Name="{x:Bind ViewModel.Media.Name, Mode=OneWay, FallbackValue={}}"
-            BorderThickness="0"
-            Command="{x:Bind ViewModel.RestorePlayerCommand}"
-            IsTabStop="False"
-            Visibility="Collapsed">
-            <Button.Resources>
-                <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
-                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
-                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTransparentBrush" />
-                <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
-            </Button.Resources>
-            <StackPanel>
-                <TextBlock
-                    HorizontalAlignment="Left"
-                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                    Text="{x:Bind ViewModel.Media.Name, Mode=OneWay, FallbackValue={}}"
-                    TextWrapping="NoWrap" />
-
-                <TextBlock
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource BodyTextBlockStyle}"
-                    Text="{x:Bind ViewModel.Media.AltCaption, Mode=OneWay, FallbackValue={}}"
-                    TextWrapping="NoWrap"
-                    Visibility="{x:Bind ViewModel.Media.AltCaption, Mode=OneWay, Converter={StaticResource StringVisibilityConverter}, FallbackValue=Collapsed}" />
-            </StackPanel>
-        </Button>
-
-        <Grid
-            x:Name="BackgroundElement"
-            Grid.Row="0"
-            Grid.RowSpan="3"
-            Grid.Column="0"
-            IsHitTestVisible="False"
-            SizeChanged="BackgroundElementOnSizeChanged">
-            <Grid
-                x:Name="BackgroundArt"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-                <Grid.RenderTransform>
-                    <TranslateTransform x:Name="BackgroundArtTranslateTransform" />
-                </Grid.RenderTransform>
-                <Image
-                    x:Name="BackgroundImageNext"
-                    Source="{x:Bind AlbumArtImage.ImageSource, Mode=OneWay}"
-                    Stretch="UniformToFill" />
-                <Image x:Name="BackgroundImage" Stretch="UniformToFill">
-                    <ctAnimations:Explicit.Animations>
-                        <ctAnimations:AnimationSet x:Name="BackgroundArtFadeOutAnimation">
-                            <ctAnimations:OpacityAnimation
-                                EasingMode="EaseInOut"
-                                To="0"
-                                Duration="0:0:1" />
-                        </ctAnimations:AnimationSet>
-                        <ctAnimations:AnimationSet x:Name="BackgroundArtFadeInAnimation">
-                            <ctAnimations:OpacityAnimation
-                                EasingMode="EaseOut"
-                                To="1"
-                                Duration="0:0:1" />
-                        </ctAnimations:AnimationSet>
-                    </ctAnimations:Explicit.Animations>
-                </Image>
-            </Grid>
-
-            <Border>
-                <Border.Background>
-                    <media:AcrylicBrush
-                        x:Name="BackgroundAcrylicBrush"
-                        BackgroundSource="Backdrop"
-                        FallbackColor="{ThemeResource BackgroundAcrylicTintFallbackColor}"
-                        TintColor="{ThemeResource BackgroundAcrylicTintColor}"
-                        TintOpacity="{ThemeResource BackgroundAcrylicTintOpacity}" />
-                </Border.Background>
-            </Border>
-        </Grid>
-
-        <!--  Music visualizer  -->
-        <controls:LivelyWebWallpaperPlayer
-            x:Name="LivelyWallpaperPlayer"
-            Grid.Row="0"
-            Grid.RowSpan="3"
-            Grid.Column="0"
-            x:Load="False"
-            Visibility="Collapsed" />
-
-        <controls:PlayerElement
-            x:Name="VideoView"
-            Grid.Row="0"
-            Grid.RowSpan="3"
-            Grid.Column="0"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch"
-            Background="Black"
-            ButtonMargin="0,52,0,84"
-            Click="VideoView_OnClick"
-            ContextFlyout="{x:Bind PlayerControls.PlayerContextMenu}"
-            DoubleTapped="VideoView_OnDoubleTapped"
-            ManipulationCompleted="VideoView_OnManipulationCompleted" />
-
-        <Button
-            x:Name="HiddenButton"
-            Grid.Row="0"
-            Grid.Column="0"
-            Click="{x:Bind ViewModel.HiddenButtonOnClick}"
-            Opacity="0"
-            Style="{x:Null}"
-            Visibility="Collapsed" />
-
-        <ctc:ConstrainedBox
-            x:Name="AlbumArtPanel"
-            Grid.Row="1"
-            Grid.Column="0"
-            MinWidth="64"
-            MaxWidth="300"
-            Margin="32,0,0,0"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Bottom"
-            AspectRatio="1:1"
-            IsHitTestVisible="False"
-            Visibility="Collapsed">
-            <Grid
-                x:Name="AlbumArt"
-                BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
-                BorderThickness="1"
-                CornerRadius="{StaticResource OverlayCornerRadius}"
-                FlowDirection="LeftToRight"
-                Shadow="{StaticResource ElevationThemeShadow}"
-                Translation="0,0,32">
-                <Grid.Background>
-                    <ImageBrush
-                        x:Name="AlbumArtImage"
-                        ImageSource="{x:Bind ViewModel.Media.Thumbnail, Mode=OneWay, FallbackValue={x:Null}}"
-                        Stretch="UniformToFill" />
-                </Grid.Background>
-                <Border
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    CornerRadius="{x:Bind AlbumArt.CornerRadius, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.Media.Thumbnail, Mode=OneWay, Converter={StaticResource EmptyObjectToVisibilityConverter}, ConverterParameter=true, FallbackValue=Visible}">
-                    <FontIcon
-                        x:Name="AlbumArtGlyph"
-                        FontSize="80"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Glyph="{x:Bind converters:GlyphConverter.ToMediaGlyph(ViewModel.Media), Mode=OneWay}" />
-                </Border>
-            </Grid>
-        </ctc:ConstrainedBox>
-
-        <Button
-            x:Name="RestorePlayerButton"
-            Grid.Row="0"
-            Grid.RowSpan="3"
-            Grid.Column="0"
-            Padding="8"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch"
-            HorizontalContentAlignment="Left"
-            VerticalContentAlignment="Top"
-            extensions:AcceleratorService.ToolTip="{x:Bind strings:Resources.RestoreView}"
-            AccessKey="{x:Bind strings:KeyboardResources.PlayerRestoreKey}"
-            AutomationProperties.Name="{x:Bind strings:Resources.RestoreView}"
-            Command="{x:Bind ViewModel.RestorePlayerCommand}"
-            KeyTipPlacementMode="Center"
-            Visibility="Collapsed">
-            <Button.Resources>
-                <ResourceDictionary>
-                    <ResourceDictionary.ThemeDictionaries>
-                        <ResourceDictionary x:Key="Default">
-                            <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
-                            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
-                            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
-                        </ResourceDictionary>
-                        <ResourceDictionary x:Key="Light">
-                            <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
-                            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
-                            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
-                        </ResourceDictionary>
-                        <ResourceDictionary x:Key="HighContrast">
-                            <StaticResource x:Key="ButtonBackground" ResourceKey="SystemControlTransparentBrush" />
-                            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SystemControlTransparentBrush" />
-                            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SystemControlTransparentBrush" />
-                        </ResourceDictionary>
-                    </ResourceDictionary.ThemeDictionaries>
-                </ResourceDictionary>
-            </Button.Resources>
-            <Button.KeyboardAccelerators>
-                <KeyboardAccelerator Key="I" />
-            </Button.KeyboardAccelerators>
-            <muxc:AnimatedIcon Width="20">
-                <animatedVisuals:AnimatedChevronDownSmallVisualSource />
-                <muxc:AnimatedIcon.FallbackIconSource>
-                    <muxc:FontIconSource FontSize="{StaticResource StandardIconFontSize}" Glyph="&#xE70E;" />
-                </muxc:AnimatedIcon.FallbackIconSource>
-                <muxc:AnimatedIcon.RenderTransform>
-                    <RotateTransform Angle="180" />
-                </muxc:AnimatedIcon.RenderTransform>
-            </muxc:AnimatedIcon>
-        </Button>
-
+        <!--  Left Docked Properties Sidebar  -->
         <Border
-            x:Name="StatusMessage"
-            Grid.Row="1"
+            x:Name="LeftPropertiesSidebar"
             Grid.Column="0"
-            Margin="32,4"
-            Padding="12,6,12,7"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-            CornerRadius="{StaticResource OverlayCornerRadius}"
-            IsHitTestVisible="False"
-            Visibility="{x:Bind ViewModel.IsOsdMessageVisible, Mode=OneWay}">
-            <ctAnimations:Implicit.ShowAnimations>
-                <ctAnimations:OpacityAnimation
-                    EasingType="Linear"
-                    To="1"
-                    Duration="{StaticResource ControlFastAnimationDuration}" />
-            </ctAnimations:Implicit.ShowAnimations>
-            <ctAnimations:Implicit.HideAnimations>
-                <ctAnimations:OpacityAnimation
-                    EasingType="Linear"
-                    To="0"
-                    Duration="{StaticResource ControlFastAnimationDuration}" />
-            </ctAnimations:Implicit.HideAnimations>
-            <TextBlock
-                x:Name="StatusMessageText"
-                Style="{StaticResource SubtitleTextBlockStyle}"
-                Text="{x:Bind GetMessageText(ViewModel.CurrentPlaybackCommand, ViewModel.OsdMessageValue), Mode=OneWay}" />
-        </Border>
+            Width="360"
+            MinWidth="280"
+            MaxWidth="640"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+            BorderThickness="0,0,1,0"
+            PointerEntered="PropertiesSidebar_PointerEntered"
+            PointerExited="PropertiesSidebar_PointerExited"
+            PointerMoved="PropertiesSidebar_PointerMoved"
+            Visibility="Collapsed">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-        <Border
-            x:Name="StatusBadgeBorder"
-            Grid.Row="0"
-            Grid.RowSpan="3"
-            Grid.Column="0"
-            Width="64"
-            Height="64"
-            Margin="32"
-            HorizontalAlignment="{x:Bind GetBadgeHorizontalAlignment(ViewModel.CurrentPlaybackCommand), Mode=OneWay}"
-            ui:VisualExtensions.NormalizedCenterPoint="0.5"
-            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-            CornerRadius="{StaticResource CircularCornerRadius}"
-            IsHitTestVisible="False"
-            Visibility="{x:Bind ViewModel.IsOsdBadgeVisible, Mode=OneWay}">
-            <ctAnimations:Implicit.ShowAnimations>
-                <ctAnimations:OpacityAnimation
-                    EasingType="Linear"
-                    To="1"
-                    Duration="{StaticResource ControlFasterAnimationDuration}" />
-                <ctAnimations:ScaleAnimation
-                    EasingMode="EaseOut"
-                    To="1"
-                    Duration="{StaticResource ControlNormalAnimationDuration}" />
-            </ctAnimations:Implicit.ShowAnimations>
-            <ctAnimations:Implicit.HideAnimations>
-                <ctAnimations:OpacityAnimation
-                    EasingType="Linear"
-                    To="0"
-                    Duration="{StaticResource ControlFastAnimationDuration}" />
-                <ctAnimations:ScaleAnimation
-                    EasingMode="EaseIn"
-                    To="0"
-                    Duration="{StaticResource ControlNormalAnimationDuration}" />
-            </ctAnimations:Implicit.HideAnimations>
-            <FontIcon
-                x:Name="StatusBadgeBorderIcon"
-                FontSize="28"
-                Glyph="{x:Bind converters:GlyphConverter.ToOsdBadgeGlyph(ViewModel.CurrentPlaybackCommand, ViewModel.OsdMessageValue), Mode=OneWay}"
-                MirroredWhenRightToLeft="{x:Bind ShouldMirrorBadgeIcon(ViewModel.CurrentPlaybackCommand), Mode=OneWay}" />
-        </Border>
+                <Grid
+                    Grid.Row="0"
+                    Padding="16,12,8,12"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-        <muxc:ProgressRing
-            Grid.Row="0"
-            Grid.RowSpan="3"
-            Grid.Column="0"
-            Width="64"
-            Height="64"
-            IsActive="True"
-            IsHitTestVisible="False"
-            Visibility="{x:Bind ViewModel.IsOpening, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-
-        <controls:NotificationView
-            x:Name="NotificationView"
-            Grid.Row="1"
-            Grid.Column="0"
-            Margin="12,0,12,-12"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Bottom"
-            Canvas.ZIndex="4" />
-
-        <Border
-            x:Name="PlayerControlsBackground"
-            Grid.Row="2"
-            Grid.Column="0"
-            Background="{ThemeResource PlayerControlsBackgroundBrush}"
-            Tapped="PlayerControlsBackground_OnTapped" />
-
-        <controls:PlayerControls
-            x:Name="PlayerControls"
-            Grid.Row="2"
-            Grid.Column="0"
-            Padding="6,20,6,12" />
-
-        <sbuc:TitleBar
-            x:Name="PlayerTitleBar"
-            MinHeight="80"
-            Background="{ThemeResource PlayerTitleBarBackgroundBrush}">
-            <sbuc:TitleBar.Resources>
-                <Thickness x:Key="TitleBarIconMargin">12,0,12,0</Thickness>
-                <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Left</HorizontalAlignment>
-            </sbuc:TitleBar.Resources>
-
-            <Grid x:Name="PlayerTitleBarContentGrid">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <Button
-                    x:Name="MinimizePlayerButton"
-                    Grid.Column="0"
-                    Width="44"
-                    Height="44"
-                    Margin="{StaticResource PlayerTitleBarButtonMargin}"
-                    extensions:AcceleratorService.ToolTip="{x:Bind strings:Resources.MinimizeImmersiveView}"
-                    AccessKey="{x:Bind strings:KeyboardResources.NavigationBackButtonKey}"
-                    AutomationProperties.Name="{x:Bind strings:Resources.MinimizeImmersiveView}"
-                    Command="{x:Bind ViewModel.GoBackCommand}"
-                    Style="{StaticResource SubtleButtonStyle}">
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Key="I" />
-                    </Button.KeyboardAccelerators>
-                    <muxc:AnimatedIcon
-                        x:Name="MinimizePlayerButtonIcon"
-                        Width="20"
-                        Height="20">
-                        <animatedVisuals:AnimatedChevronDownSmallVisualSource />
-                        <muxc:AnimatedIcon.FallbackIconSource>
-                            <muxc:FontIconSource Glyph="&#xE70D;" />
-                        </muxc:AnimatedIcon.FallbackIconSource>
-                    </muxc:AnimatedIcon>
-                </Button>
-
-                <Button
-                    x:Name="PlayQueueButton"
-                    Grid.Column="1"
-                    Width="44"
-                    Height="44"
-                    Margin="{StaticResource PlayerTitleBarButtonMargin}"
-                    Padding="0"
-                    AccessKey="{x:Bind strings:KeyboardResources.PlayerQueueKey}"
-                    AllowDrop="True"
-                    AutomationProperties.Name="{x:Bind strings:Resources.PlayQueue}"
-                    DragEnter="PlayQueueButton_OnDragEnter"
-                    DragLeave="PlayQueueButton_OnDragLeave"
-                    Style="{StaticResource SubtleButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind strings:Resources.PlayQueue}">
-                    <FontIcon
-                        x:Name="PlayQueueButtonIcon"
-                        FontFamily="{StaticResource ScreenboxSymbolThemeFontFamily}"
-                        FontSize="20"
-                        Glyph="{StaticResource PlaylistMusicGlyph}" />
-                    <Button.Flyout>
-                        <Flyout
-                            x:Name="PlayQueueFlyout"
-                            Opened="PlayQueueFlyout_OnOpened"
-                            Opening="PlayQueueFlyout_OnOpening"
-                            Placement="BottomEdgeAlignedLeft">
-                            <Flyout.FlyoutPresenterStyle>
-                                <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
-                                    <!--  Remove side and bottom padding, allowing the content to set these values  -->
-                                    <Setter Property="Padding" Value="0,12,0,0" />
-                                    <!--  Turn off vertical scroll to prevent a second scrollbar on smaller pages  -->
-                                    <!--<Setter Property="ScrollViewer.VerticalScrollMode" Value="Auto" />-->
-                                    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
-                                </Style>
-                            </Flyout.FlyoutPresenterStyle>
-                            <controls:PlayQueueControl
-                                x:Name="PlayQueue"
-                                Width="432"
-                                MinHeight="200"
-                                MaxHeight="500"
-                                Padding="12,0"
-                                x:Load="False"
-                                IsAccessKeyScope="True"
-                                IsFlyout="True" />
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <StackPanel
-                    x:Name="TitleBarTextStackPanel"
-                    Grid.Column="2"
-                    Margin="16,-12,0,16"
-                    IsHitTestVisible="False"
-                    Orientation="Vertical">
                     <TextBlock
-                        x:Name="TitleBarTitleTextBlock"
-                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind strings:Resources.Properties}" />
+
+                    <StackPanel
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="2">
+                        <Button
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="DockPropertiesRight_Click"
+                            ToolTipService.ToolTip="Dock to right">
+                            <FontIcon FontSize="12" Glyph="&#xE90D;" />
+                        </Button>
+                        <Button
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="FloatProperties_Click"
+                            ToolTipService.ToolTip="Float window">
+                            <FontIcon FontSize="12" Glyph="&#xE8A7;" />
+                        </Button>
+                        <Button
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="CloseDockedProperties_Click"
+                            ToolTipService.ToolTip="{x:Bind strings:Resources.Close}">
+                            <FontIcon FontSize="12" Glyph="&#xE8BB;" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" Padding="16,12,16,12">
+                    <controls:PropertiesView x:Name="LeftPropertiesView" />
+                </Grid>
+
+                <primitives:Thumb
+                    Grid.RowSpan="2"
+                    Width="6"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Stretch"
+                    DragDelta="LeftSidebarSplitter_DragDelta"
+                    Opacity="0"
+                    PointerEntered="SidebarSplitter_PointerEntered"
+                    PointerExited="SidebarSplitter_PointerExited" />
+            </Grid>
+        </Border>
+
+        <!--  Main Player Viewport (scales down automatically when Left/Right sidebar is open)  -->
+        <Grid
+            x:Name="LayoutRoot"
+            Grid.Column="1"
+            KeyboardAcceleratorPlacementMode="Hidden"
+            PointerMoved="{x:Bind ViewModel.OnPointerMoved}"
+            PreviewKeyDown="LayoutRoot_OnPreviewKeyDown"
+            PreviewKeyUp="LayoutRoot_OnPreviewKeyUp"
+            Translation="0,0,32">
+            <Grid.Transitions>
+                <TransitionCollection>
+                    <PaneThemeTransition Edge="Bottom" />
+                </TransitionCollection>
+            </Grid.Transitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="FirstColumn" Width="*" />
+                <ColumnDefinition x:Name="SecondColumn" Width="0" />
+            </Grid.ColumnDefinitions>
+
+            <Grid.KeyboardAccelerators>
+                <!--  Volume  -->
+                <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPlus}" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Add" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemMinus}" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Subtract" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Up" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Down" Invoked="ChangeVolumeKeyboardAccelerator_OnInvoked" />
+                <!--  Seek  -->
+                <KeyboardAccelerator Key="Left" Invoked="SeekKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator
+                    Key="Left"
+                    Invoked="SeekKeyboardAccelerator_OnInvoked"
+                    Modifiers="Control" />
+                <KeyboardAccelerator
+                    Key="Left"
+                    Invoked="SeekKeyboardAccelerator_OnInvoked"
+                    Modifiers="Shift" />
+                <KeyboardAccelerator Key="Right" Invoked="SeekKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator
+                    Key="Right"
+                    Invoked="SeekKeyboardAccelerator_OnInvoked"
+                    Modifiers="Control" />
+                <KeyboardAccelerator
+                    Key="Right"
+                    Invoked="SeekKeyboardAccelerator_OnInvoked"
+                    Modifiers="Shift" />
+                <KeyboardAccelerator Key="J" Invoked="SeekKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="L" Invoked="SeekKeyboardAccelerator_OnInvoked" />
+                <!--  Frame stepping  -->
+                <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPeriod}" Invoked="FrameSteppingKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemComma}" Invoked="FrameSteppingKeyboardAccelerator_OnInvoked" />
+                <!--  Playback speed  -->
+                <KeyboardAccelerator
+                    Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPeriod}"
+                    Invoked="PlaybackRateKeyboardAccelerator_OnInvoked"
+                    Modifiers="Shift" />
+                <KeyboardAccelerator
+                    Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemComma}"
+                    Invoked="PlaybackRateKeyboardAccelerator_OnInvoked"
+                    Modifiers="Shift" />
+                <!--  Window resize  -->
+                <KeyboardAccelerator
+                    Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemPlus}"
+                    Invoked="WindowResizeKeyboardAccelerator_OnInvoked"
+                    Modifiers="Control" />
+                <KeyboardAccelerator
+                    Key="{x:Bind helpers:KeyboardAcceleratorHelper.OemMinus}"
+                    Invoked="WindowResizeKeyboardAccelerator_OnInvoked"
+                    Modifiers="Control" />
+                <KeyboardAccelerator Key="Number1" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Number2" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Number3" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Number4" Invoked="WindowResizeKeyboardAccelerator_OnInvoked" />
+                <!--  Seek to percentage  -->
+                <KeyboardAccelerator Key="NumberPad0" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad1" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad2" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad3" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad4" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad5" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad6" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad7" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad8" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="NumberPad9" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="Home" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <KeyboardAccelerator Key="End" Invoked="SeekToPercentageKeyboardAccelerator_OnInvoked" />
+                <!--  Escape key handling  -->
+                <KeyboardAccelerator
+                    Key="Escape"
+                    Invoked="EscapeKeyboardAccelerator_OnInvoked"
+                    IsEnabled="{x:Bind ViewModel.IsPlayerVisibilityVisible, Mode=OneWay}" />
+            </Grid.KeyboardAccelerators>
+
+            <Button
+                x:Name="MiniPlayerTitleButton"
+                Grid.Column="1"
+                Margin="16,0,10,0"
+                Padding="0"
+                AutomationProperties.Name="{x:Bind ViewModel.Media.Name, Mode=OneWay, FallbackValue={}}"
+                BorderThickness="0"
+                Command="{x:Bind ViewModel.RestorePlayerCommand}"
+                IsTabStop="False"
+                Visibility="Collapsed">
+                <Button.Resources>
+                    <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </Button.Resources>
+                <StackPanel>
+                    <TextBlock
+                        HorizontalAlignment="Left"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
                         Text="{x:Bind ViewModel.Media.Name, Mode=OneWay, FallbackValue={}}"
                         TextWrapping="NoWrap" />
+
                     <TextBlock
-                        x:Name="TitleBarSubtitleTextBlock"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        OpticalMarginAlignment="TrimSideBearings"
+                        Style="{StaticResource BodyTextBlockStyle}"
                         Text="{x:Bind ViewModel.Media.AltCaption, Mode=OneWay, FallbackValue={}}"
+                        TextWrapping="NoWrap"
                         Visibility="{x:Bind ViewModel.Media.AltCaption, Mode=OneWay, Converter={StaticResource StringVisibilityConverter}, FallbackValue=Collapsed}" />
                 </StackPanel>
+            </Button>
+
+            <Grid
+                x:Name="BackgroundElement"
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Grid.Column="0"
+                IsHitTestVisible="False"
+                SizeChanged="BackgroundElementOnSizeChanged">
+                <Grid
+                    x:Name="BackgroundArt"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="BackgroundArtTranslateTransform" />
+                    </Grid.RenderTransform>
+                    <Image
+                        x:Name="BackgroundImageNext"
+                        Source="{x:Bind AlbumArtImage.ImageSource, Mode=OneWay}"
+                        Stretch="UniformToFill" />
+                    <Image x:Name="BackgroundImage" Stretch="UniformToFill">
+                        <ctAnimations:Explicit.Animations>
+                            <ctAnimations:AnimationSet x:Name="BackgroundArtFadeOutAnimation">
+                                <ctAnimations:OpacityAnimation
+                                    EasingMode="EaseInOut"
+                                    To="0"
+                                    Duration="0:0:1" />
+                            </ctAnimations:AnimationSet>
+                            <ctAnimations:AnimationSet x:Name="BackgroundArtFadeInAnimation">
+                                <ctAnimations:OpacityAnimation
+                                    EasingMode="EaseOut"
+                                    To="1"
+                                    Duration="0:0:1" />
+                            </ctAnimations:AnimationSet>
+                        </ctAnimations:Explicit.Animations>
+                    </Image>
+                </Grid>
+
+                <Border>
+                    <Border.Background>
+                        <media:AcrylicBrush
+                            x:Name="BackgroundAcrylicBrush"
+                            BackgroundSource="Backdrop"
+                            FallbackColor="{ThemeResource BackgroundAcrylicTintFallbackColor}"
+                            TintColor="{ThemeResource BackgroundAcrylicTintColor}"
+                            TintOpacity="{ThemeResource BackgroundAcrylicTintOpacity}" />
+                    </Border.Background>
+                </Border>
             </Grid>
 
-            <sbuc:TitleBar.Footer>
-                <Button
-                    x:Name="LivelyOptionsButton"
-                    Grid.Column="4"
-                    Width="44"
-                    Height="44"
-                    Margin="{StaticResource PlayerTitleBarButtonMargin}"
-                    Padding="0"
-                    AutomationProperties.Name="{x:Bind strings:Resources.VisualizerOptionsToolTip}"
-                    Style="{StaticResource SubtleButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind strings:Resources.VisualizerOptionsToolTip}">
-                    <FontIcon
-                        x:Name="LivelyOptionsButtonIcon"
-                        FontFamily="{StaticResource ScreenboxSymbolThemeFontFamily}"
-                        FontSize="20"
-                        Glyph="{StaticResource MusicVisualizerGlyph}" />
-                    <Button.Flyout>
-                        <Flyout>
-                            <Flyout.FlyoutPresenterStyle>
-                                <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
-                                    <Setter Property="Background" Value="{ThemeResource AcrylicInAppFillColorBaseBrush}" />
-                                    <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
-                                    <Setter Property="Padding" Value="0,0,0,0" />
-                                </Style>
-                            </Flyout.FlyoutPresenterStyle>
-                            <controls:LivelyWallpaperSelector
-                                MaxWidth="288"
-                                Padding="16,4,16,17"
-                                HeaderVisibility="Visible" />
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-            </sbuc:TitleBar.Footer>
-        </sbuc:TitleBar>
+            <!--  Music visualizer  -->
+            <controls:LivelyWebWallpaperPlayer
+                x:Name="LivelyWallpaperPlayer"
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Grid.Column="0"
+                x:Load="False"
+                Visibility="Collapsed" />
+
+            <controls:PlayerElement
+                x:Name="VideoView"
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Grid.Column="0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                Background="Black"
+                ButtonMargin="0,52,0,84"
+                Click="VideoView_OnClick"
+                ContextFlyout="{x:Bind PlayerControls.PlayerContextMenu}"
+                DoubleTapped="VideoView_OnDoubleTapped"
+                ManipulationCompleted="VideoView_OnManipulationCompleted" />
+
+            <Button
+                x:Name="HiddenButton"
+                Grid.Row="0"
+                Grid.Column="0"
+                Click="{x:Bind ViewModel.HiddenButtonOnClick}"
+                Opacity="0"
+                Style="{x:Null}"
+                Visibility="Collapsed" />
+
+            <ctc:ConstrainedBox
+                x:Name="AlbumArtPanel"
+                Grid.Row="1"
+                Grid.Column="0"
+                MinWidth="64"
+                MaxWidth="300"
+                Margin="32,0,0,0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                AspectRatio="1:1"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Grid
+                    x:Name="AlbumArt"
+                    BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource OverlayCornerRadius}"
+                    FlowDirection="LeftToRight"
+                    Shadow="{StaticResource ElevationThemeShadow}"
+                    Translation="0,0,32">
+                    <Grid.Background>
+                        <ImageBrush x:Name="AlbumArtImage" Stretch="UniformToFill" />
+                    </Grid.Background>
+                    <Border
+                        x:Name="AlbumArtPlaceholder"
+                        Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                        CornerRadius="{x:Bind AlbumArt.CornerRadius, Mode=OneWay}">
+                        <FontIcon
+                            x:Name="AlbumArtGlyph"
+                            FontSize="80"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="{x:Bind converters:GlyphConverter.ToMediaGlyph(ViewModel.Media), Mode=OneWay}" />
+                    </Border>
+                </Grid>
+            </ctc:ConstrainedBox>
+
+            <Button
+                x:Name="RestorePlayerButton"
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Grid.Column="0"
+                Padding="8"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                HorizontalContentAlignment="Left"
+                VerticalContentAlignment="Top"
+                extensions:AcceleratorService.ToolTip="{x:Bind strings:Resources.RestoreView}"
+                AccessKey="{x:Bind strings:KeyboardResources.PlayerRestoreKey}"
+                AutomationProperties.Name="{x:Bind strings:Resources.RestoreView}"
+                Command="{x:Bind ViewModel.RestorePlayerCommand}"
+                KeyTipPlacementMode="Center"
+                Visibility="Collapsed">
+                <Button.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="HighContrast">
+                                <StaticResource x:Key="ButtonBackground" ResourceKey="SystemControlTransparentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SystemControlTransparentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SystemControlTransparentBrush" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </Button.Resources>
+                <Button.KeyboardAccelerators>
+                    <KeyboardAccelerator Key="I" />
+                </Button.KeyboardAccelerators>
+                <muxc:AnimatedIcon Width="20">
+                    <animatedVisuals:AnimatedChevronDownSmallVisualSource />
+                    <muxc:AnimatedIcon.FallbackIconSource>
+                        <muxc:FontIconSource FontSize="{StaticResource StandardIconFontSize}" Glyph="&#xE70E;" />
+                    </muxc:AnimatedIcon.FallbackIconSource>
+                    <muxc:AnimatedIcon.RenderTransform>
+                        <RotateTransform Angle="180" />
+                    </muxc:AnimatedIcon.RenderTransform>
+                </muxc:AnimatedIcon>
+            </Button>
+
+            <Border
+                x:Name="StatusMessage"
+                Grid.Row="1"
+                Grid.Column="0"
+                Margin="32,4"
+                Padding="12,6,12,7"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                CornerRadius="{StaticResource OverlayCornerRadius}"
+                IsHitTestVisible="False"
+                Visibility="{x:Bind ViewModel.IsOsdMessageVisible, Mode=OneWay}">
+                <ctAnimations:Implicit.ShowAnimations>
+                    <ctAnimations:OpacityAnimation
+                        EasingType="Linear"
+                        To="1"
+                        Duration="{StaticResource ControlFastAnimationDuration}" />
+                </ctAnimations:Implicit.ShowAnimations>
+                <ctAnimations:Implicit.HideAnimations>
+                    <ctAnimations:OpacityAnimation
+                        EasingType="Linear"
+                        To="0"
+                        Duration="{StaticResource ControlFastAnimationDuration}" />
+                </ctAnimations:Implicit.HideAnimations>
+                <TextBlock
+                    x:Name="StatusMessageText"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="{x:Bind GetMessageText(ViewModel.CurrentPlaybackCommand, ViewModel.OsdMessageValue), Mode=OneWay}" />
+            </Border>
+
+            <Border
+                x:Name="StatusBadgeBorder"
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Grid.Column="0"
+                Width="64"
+                Height="64"
+                Margin="32"
+                HorizontalAlignment="{x:Bind GetBadgeHorizontalAlignment(ViewModel.CurrentPlaybackCommand), Mode=OneWay}"
+                ui:VisualExtensions.NormalizedCenterPoint="0.5"
+                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                CornerRadius="{StaticResource CircularCornerRadius}"
+                IsHitTestVisible="False"
+                Visibility="{x:Bind ViewModel.IsOsdBadgeVisible, Mode=OneWay}">
+                <ctAnimations:Implicit.ShowAnimations>
+                    <ctAnimations:OpacityAnimation
+                        EasingType="Linear"
+                        To="1"
+                        Duration="{StaticResource ControlFasterAnimationDuration}" />
+                    <ctAnimations:ScaleAnimation
+                        EasingMode="EaseOut"
+                        To="1"
+                        Duration="{StaticResource ControlNormalAnimationDuration}" />
+                </ctAnimations:Implicit.ShowAnimations>
+                <ctAnimations:Implicit.HideAnimations>
+                    <ctAnimations:OpacityAnimation
+                        EasingType="Linear"
+                        To="0"
+                        Duration="{StaticResource ControlFastAnimationDuration}" />
+                    <ctAnimations:ScaleAnimation
+                        EasingMode="EaseIn"
+                        To="0"
+                        Duration="{StaticResource ControlNormalAnimationDuration}" />
+                </ctAnimations:Implicit.HideAnimations>
+                <FontIcon
+                    x:Name="StatusBadgeBorderIcon"
+                    FontSize="28"
+                    Glyph="{x:Bind converters:GlyphConverter.ToOsdBadgeGlyph(ViewModel.CurrentPlaybackCommand, ViewModel.OsdMessageValue), Mode=OneWay}"
+                    MirroredWhenRightToLeft="{x:Bind ShouldMirrorBadgeIcon(ViewModel.CurrentPlaybackCommand), Mode=OneWay}" />
+            </Border>
+
+            <muxc:ProgressRing
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Grid.Column="0"
+                Width="64"
+                Height="64"
+                IsActive="True"
+                IsHitTestVisible="False"
+                Visibility="{x:Bind ViewModel.IsOpening, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+            <controls:NotificationView
+                x:Name="NotificationView"
+                Grid.Row="1"
+                Grid.Column="0"
+                Margin="12,0,12,-12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Canvas.ZIndex="4" />
+
+            <Border
+                x:Name="PlayerControlsBackground"
+                Grid.Row="2"
+                Grid.Column="0"
+                Background="{ThemeResource PlayerControlsBackgroundBrush}"
+                Tapped="PlayerControlsBackground_OnTapped" />
+
+            <controls:PlayerControls
+                x:Name="PlayerControls"
+                Grid.Row="2"
+                Grid.Column="0"
+                Padding="6,20,6,12" />
+
+            <sbuc:TitleBar
+                x:Name="PlayerTitleBar"
+                MinHeight="80"
+                Background="{ThemeResource PlayerTitleBarBackgroundBrush}">
+                <sbuc:TitleBar.Resources>
+                    <Thickness x:Key="TitleBarIconMargin">12,0,12,0</Thickness>
+                    <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Left</HorizontalAlignment>
+                </sbuc:TitleBar.Resources>
+
+                <Grid x:Name="PlayerTitleBarContentGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button
+                        x:Name="MinimizePlayerButton"
+                        Grid.Column="0"
+                        Width="44"
+                        Height="44"
+                        Margin="{StaticResource PlayerTitleBarButtonMargin}"
+                        extensions:AcceleratorService.ToolTip="{x:Bind strings:Resources.MinimizeImmersiveView}"
+                        AccessKey="{x:Bind strings:KeyboardResources.NavigationBackButtonKey}"
+                        AutomationProperties.Name="{x:Bind strings:Resources.MinimizeImmersiveView}"
+                        Command="{x:Bind ViewModel.GoBackCommand}"
+                        Style="{StaticResource SubtleButtonStyle}">
+                        <Button.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="I" />
+                        </Button.KeyboardAccelerators>
+                        <muxc:AnimatedIcon
+                            x:Name="MinimizePlayerButtonIcon"
+                            Width="20"
+                            Height="20">
+                            <animatedVisuals:AnimatedChevronDownSmallVisualSource />
+                            <muxc:AnimatedIcon.FallbackIconSource>
+                                <muxc:FontIconSource Glyph="&#xE70D;" />
+                            </muxc:AnimatedIcon.FallbackIconSource>
+                        </muxc:AnimatedIcon>
+                    </Button>
+
+                    <Button
+                        x:Name="PlayQueueButton"
+                        Grid.Column="1"
+                        Width="44"
+                        Height="44"
+                        Margin="{StaticResource PlayerTitleBarButtonMargin}"
+                        Padding="0"
+                        AccessKey="{x:Bind strings:KeyboardResources.PlayerQueueKey}"
+                        AllowDrop="True"
+                        AutomationProperties.Name="{x:Bind strings:Resources.PlayQueue}"
+                        DragEnter="PlayQueueButton_OnDragEnter"
+                        DragLeave="PlayQueueButton_OnDragLeave"
+                        Style="{StaticResource SubtleButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind strings:Resources.PlayQueue}">
+                        <FontIcon
+                            x:Name="PlayQueueButtonIcon"
+                            FontFamily="{StaticResource ScreenboxSymbolThemeFontFamily}"
+                            FontSize="20"
+                            Glyph="{StaticResource PlaylistMusicGlyph}" />
+                        <Button.Flyout>
+                            <Flyout
+                                x:Name="PlayQueueFlyout"
+                                Opened="PlayQueueFlyout_OnOpened"
+                                Opening="PlayQueueFlyout_OnOpening"
+                                Placement="BottomEdgeAlignedLeft">
+                                <Flyout.FlyoutPresenterStyle>
+                                    <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+                                        <Setter Property="Padding" Value="0,12,0,0" />
+                                        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                                    </Style>
+                                </Flyout.FlyoutPresenterStyle>
+                                <controls:PlayQueueControl
+                                    x:Name="PlayQueue"
+                                    Width="432"
+                                    MinHeight="200"
+                                    MaxHeight="500"
+                                    Padding="12,0"
+                                    x:Load="False"
+                                    IsAccessKeyScope="True"
+                                    IsFlyout="True" />
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+
+                    <StackPanel
+                        x:Name="TitleBarTextStackPanel"
+                        Grid.Column="2"
+                        Margin="16,-12,0,16"
+                        IsHitTestVisible="False"
+                        Orientation="Vertical">
+                        <TextBlock
+                            x:Name="TitleBarTitleTextBlock"
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="{x:Bind ViewModel.Media.Name, Mode=OneWay, FallbackValue={}}"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            x:Name="TitleBarSubtitleTextBlock"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            OpticalMarginAlignment="TrimSideBearings"
+                            Text="{x:Bind ViewModel.Media.AltCaption, Mode=OneWay, FallbackValue={}}"
+                            Visibility="{x:Bind ViewModel.Media.AltCaption, Mode=OneWay, Converter={StaticResource StringVisibilityConverter}, FallbackValue=Collapsed}" />
+                    </StackPanel>
+                </Grid>
+
+                <sbuc:TitleBar.Footer>
+                    <Button
+                        x:Name="LivelyOptionsButton"
+                        Grid.Column="4"
+                        Width="44"
+                        Height="44"
+                        Margin="{StaticResource PlayerTitleBarButtonMargin}"
+                        Padding="0"
+                        AutomationProperties.Name="{x:Bind strings:Resources.VisualizerOptionsToolTip}"
+                        Style="{StaticResource SubtleButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind strings:Resources.VisualizerOptionsToolTip}">
+                        <FontIcon
+                            x:Name="LivelyOptionsButtonIcon"
+                            FontFamily="{StaticResource ScreenboxSymbolThemeFontFamily}"
+                            FontSize="20"
+                            Glyph="{StaticResource MusicVisualizerGlyph}" />
+                        <Button.Flyout>
+                            <Flyout>
+                                <Flyout.FlyoutPresenterStyle>
+                                    <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+                                        <Setter Property="Background" Value="{ThemeResource AcrylicInAppFillColorBaseBrush}" />
+                                        <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
+                                        <Setter Property="Padding" Value="0,0,0,0" />
+                                    </Style>
+                                </Flyout.FlyoutPresenterStyle>
+                                <controls:LivelyWallpaperSelector
+                                    MaxWidth="288"
+                                    Padding="16,4,16,17"
+                                    HeaderVisibility="Visible" />
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </sbuc:TitleBar.Footer>
+            </sbuc:TitleBar>
+        </Grid>
+
+        <!--  Right Docked Properties Sidebar  -->
+        <Border
+            x:Name="RightPropertiesSidebar"
+            Grid.Column="2"
+            Width="360"
+            MinWidth="280"
+            MaxWidth="640"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+            BorderThickness="1,0,0,0"
+            PointerEntered="PropertiesSidebar_PointerEntered"
+            PointerExited="PropertiesSidebar_PointerExited"
+            PointerMoved="PropertiesSidebar_PointerMoved"
+            Visibility="Collapsed">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid
+                    x:Name="RightPropertiesHeaderGrid"
+                    Grid.Row="0"
+                    Padding="16,44,8,12"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind strings:Resources.Properties}" />
+
+                    <StackPanel
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="2">
+                        <Button
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="DockPropertiesLeft_Click"
+                            ToolTipService.ToolTip="Dock to left">
+                            <FontIcon FontSize="12" Glyph="&#xE90C;" />
+                        </Button>
+                        <Button
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="FloatProperties_Click"
+                            ToolTipService.ToolTip="Float window">
+                            <FontIcon FontSize="12" Glyph="&#xE8A7;" />
+                        </Button>
+                        <Button
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="CloseDockedProperties_Click"
+                            ToolTipService.ToolTip="{x:Bind strings:Resources.Close}">
+                            <FontIcon FontSize="12" Glyph="&#xE8BB;" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" Padding="16,12,16,12">
+                    <controls:PropertiesView x:Name="RightPropertiesView" />
+                </Grid>
+
+                <primitives:Thumb
+                    Grid.RowSpan="2"
+                    Width="6"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Stretch"
+                    DragDelta="RightSidebarSplitter_DragDelta"
+                    Opacity="0"
+                    PointerEntered="SidebarSplitter_PointerEntered"
+                    PointerExited="SidebarSplitter_PointerExited" />
+            </Grid>
+        </Border>
 
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="ControlsVisibilityStates" CurrentStateChanged="ControlsVisibilityStates_OnCurrentStateChanged">
@@ -670,7 +854,6 @@
             <VisualStateGroup x:Name="ContentStates">
                 <VisualState x:Name="Video">
                     <VisualState.Setters>
-                        <!--<Setter Target="LivelyOptionsButton.Visibility" Value="Collapsed" />-->
                         <Setter Target="BackgroundElement.Visibility" Value="Collapsed" />
                         <Setter Target="VideoView.Opacity" Value="1" />
                         <Setter Target="AlbumArtPanel.Visibility" Value="Collapsed" />
@@ -768,10 +951,6 @@
                             <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BackgroundElement" Storyboard.TargetProperty="Visibility">
                                 <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
                             </ObjectAnimationUsingKeyFrames>
-                            <!--  Do not apply transition on LivelyWallpaperPlayer here. The player may not been loaded yet.  -->
-                            <!--<ObjectAnimationUsingKeyFrames Storyboard.TargetName="LivelyWallpaperPlayer" Storyboard.TargetProperty="Visibility" >
-                                <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed" />
-                            </ObjectAnimationUsingKeyFrames>-->
                             <RepositionThemeAnimation FromVerticalOffset="200" TargetName="AlbumArtPanel" />
                         </Storyboard>
                     </VisualTransition>
@@ -832,6 +1011,7 @@
                         <Setter Target="StatusBadgeBorder.Height" Value="80" />
                         <Setter Target="StatusBadgeBorderIcon.FontSize" Value="32" />
                         <Setter Target="PlayerControls.Padding" Value="20" />
+                        <Setter Target="RightPropertiesHeaderGrid.Padding" Value="16,12,8,12" />
                     </VisualState.Setters>
                     <Storyboard>
                         <RepositionThemeAnimation
@@ -861,7 +1041,6 @@
                         <Setter Target="TitleBarTextStackPanel.Spacing" Value="8" />
                         <Setter Target="TitleBarTitleTextBlock.FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
                         <Setter Target="TitleBarSubtitleTextBlock.FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
-                        <!--<Setter Target="LivelyOptionsButton.Visibility" Value="Collapsed" />-->
                         <Setter Target="AlbumArtPanel.HorizontalAlignment" Value="Center" />
                         <Setter Target="AlbumArtPanel.VerticalAlignment" Value="Center" />
                         <Setter Target="AlbumArtPanel.Margin" Value="16,12" />
@@ -875,6 +1054,7 @@
                         <Setter Target="StatusBadgeBorderIcon.FontSize" Value="{StaticResource SubtitleTextBlockFontSize}" />
                         <Setter Target="NotificationView.Margin" Value="4" />
                         <Setter Target="PlayerControls.Padding" Value="0,4,0,0" />
+                        <Setter Target="RightPropertiesHeaderGrid.Padding" Value="16,12,8,12" />
                     </VisualState.Setters>
                     <Storyboard>
                         <RepositionThemeAnimation FromHorizontalOffset="-96" TargetName="PlayerTitleBar" />

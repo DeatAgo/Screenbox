@@ -80,7 +80,9 @@ public partial class LivelyWallpaperPlayerViewModel : ObservableRecipient,
 
     private void MediaOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MediaViewModel.Name) or nameof(MediaViewModel.MainArtist))
+        if (e.PropertyName is nameof(MediaViewModel.Name)
+            or nameof(MediaViewModel.MainArtist)
+            or nameof(MediaViewModel.Thumbnail))
         {
             _timer.Debounce(() => TrackUpdateRequested?.Invoke(this, EventArgs.Empty), TimeSpan.FromMilliseconds(50));
         }
@@ -220,27 +222,47 @@ public partial class LivelyWallpaperPlayerViewModel : ObservableRecipient,
     }
 
     // Ref: https://github.com/rocksdanister/lively/wiki/Web-Guide-V-:-System-Data#--system-nowplaying
+    private MediaViewModel? _pendingThumbnailMedia;
+
     public async Task UpdateCurrentTrack(WebView2 webView)
     {
         if (Source is null || Media == null || webView.CoreWebView2 == null ||
             webView.CoreWebView2.IsSuspended || !Source.IsMusic)
             return;
 
+        var currentMedia = Media;
         var model = new LivelyMusicModel
         {
-            Title = Media.Name,
-            Artist = Media.MainArtist?.Name ?? string.Empty,
-            // Optional: Complete the mapping.
+            Title = currentMedia.Name,
+            Artist = currentMedia.MainArtist?.Name ?? string.Empty,
         };
 
-        if (Media.Thumbnail != null)
+        if (currentMedia.Thumbnail != null)
         {
-            using var thumbnailSource = await Media.GetThumbnailSourceAsync();
+            _pendingThumbnailMedia = null;
+            using var thumbnailSource = await currentMedia.GetThumbnailSourceAsync();
             var base64 = thumbnailSource != null ? await ReadToBase64Async(thumbnailSource) : string.Empty;
             model.Thumbnail = base64;
+
+            await webView.ExecuteScriptFunctionAsync(
+                "livelyCurrentTrack",
+                JsonSerializer.Serialize(model, LivelyJsonContext.Default.LivelyMusicModel));
+            return;
         }
 
-        await webView.ExecuteScriptFunctionAsync("livelyCurrentTrack", JsonSerializer.Serialize(model, LivelyJsonContext.Default.LivelyMusicModel));
+        // Thumbnail is still decoding asynchronously for this video/track:
+        // Hold off sending an empty thumbnail briefly so Music Tunnel doesn't flash the default purple background.
+        _pendingThumbnailMedia = currentMedia;
+        await Task.Delay(1200);
+
+        // If the track changed again or Thumbnail already arrived and triggered an update, abort this fallback.
+        if (_pendingThumbnailMedia != currentMedia || Media != currentMedia || currentMedia.Thumbnail != null)
+            return;
+
+        _pendingThumbnailMedia = null;
+        await webView.ExecuteScriptFunctionAsync(
+            "livelyCurrentTrack",
+            JsonSerializer.Serialize(model, LivelyJsonContext.Default.LivelyMusicModel));
     }
 
     private void LoadMedia()

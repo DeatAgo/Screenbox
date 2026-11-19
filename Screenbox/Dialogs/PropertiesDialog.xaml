@@ -1,18 +1,206 @@
-<ContentDialog
+<UserControl
     x:Class="Screenbox.Dialogs.PropertiesDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Screenbox.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:primitives="using:Windows.UI.Xaml.Controls.Primitives"
     xmlns:strings="using:Screenbox.Strings"
-    Title="{x:Bind strings:Resources.Properties}"
-    CloseButtonText="{x:Bind strings:Resources.Close}"
-    DefaultButton="Close"
-    Style="{StaticResource DefaultContentDialogStyle}"
+    Width="480"
+    Height="560"
+    MinWidth="340"
+    MinHeight="260"
+    KeyDown="OnKeyDown"
     mc:Ignorable="d">
 
+    <UserControl.Resources>
+        <ControlTemplate x:Key="InvisibleThumbTemplate" TargetType="primitives:Thumb">
+            <Border Background="#01000000" />
+        </ControlTemplate>
+    </UserControl.Resources>
+
     <Grid>
-        <controls:PropertiesView Media="{x:Bind Media, Mode=OneWay}" />
+        <Border
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!--  Draggable Title Bar  -->
+                <Grid
+                    x:Name="HeaderGrid"
+                    Grid.Row="0"
+                    Padding="20,12,12,12"
+                    Background="Transparent"
+                    PointerMoved="HeaderGrid_PointerMoved"
+                    PointerPressed="HeaderGrid_PointerPressed"
+                    PointerReleased="HeaderGrid_PointerReleased">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        Text="{x:Bind strings:Resources.Properties}" />
+
+                    <StackPanel
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="2">
+                        <Button
+                            Width="32"
+                            Height="32"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="DockLeftButton_Click"
+                            ToolTipService.ToolTip="Dock to left">
+                            <FontIcon FontSize="12" Glyph="&#xE90C;" />
+                        </Button>
+
+                        <Button
+                            Width="32"
+                            Height="32"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="DockRightButton_Click"
+                            ToolTipService.ToolTip="Dock to right">
+                            <FontIcon FontSize="12" Glyph="&#xE90D;" />
+                        </Button>
+
+                        <Button
+                            Width="32"
+                            Height="32"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="CloseButton_Click"
+                            ToolTipService.ToolTip="{x:Bind strings:Resources.Close}">
+                            <FontIcon FontSize="12" Glyph="&#xE8BB;" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!--  Metadata Content  -->
+                <Grid Grid.Row="1" Padding="20,4,20,12">
+                    <controls:PropertiesView Media="{x:Bind Media, Mode=OneWay}" />
+                </Grid>
+
+                <!--  Footer with Close Button and Visual Bottom-Right Grip  -->
+                <Grid
+                    Grid.Row="2"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,1,0,0">
+                    <Button
+                        MinWidth="96"
+                        Margin="20,10,24,10"
+                        HorizontalAlignment="Right"
+                        Click="CloseButton_Click"
+                        Content="{x:Bind strings:Resources.Close}" />
+
+                    <FontIcon
+                        Margin="0,0,6,6"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Glyph="&#xE76F;"
+                        IsHitTestVisible="False" />
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!--  4 Edge Resize Handles  -->
+        <primitives:Thumb
+            Height="6"
+            Margin="12,0"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            DragDelta="TopThumb_DragDelta"
+            PointerEntered="NorthSouth_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
+
+        <primitives:Thumb
+            Height="6"
+            Margin="12,0"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Bottom"
+            DragDelta="BottomThumb_DragDelta"
+            PointerEntered="NorthSouth_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
+
+        <primitives:Thumb
+            Width="6"
+            Margin="0,12"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Stretch"
+            DragDelta="LeftThumb_DragDelta"
+            PointerEntered="EastWest_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
+
+        <primitives:Thumb
+            Width="6"
+            Margin="0,12"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Stretch"
+            DragDelta="RightThumb_DragDelta"
+            PointerEntered="EastWest_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
+
+        <!--  4 Corner Resize Handles  -->
+        <primitives:Thumb
+            Width="12"
+            Height="12"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            DragDelta="TopLeftThumb_DragDelta"
+            PointerEntered="NwSe_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
+
+        <primitives:Thumb
+            Width="12"
+            Height="12"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            DragDelta="TopRightThumb_DragDelta"
+            PointerEntered="NeSw_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
+
+        <primitives:Thumb
+            Width="12"
+            Height="12"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            DragDelta="BottomLeftThumb_DragDelta"
+            PointerEntered="NeSw_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
+
+        <primitives:Thumb
+            Width="20"
+            Height="20"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            DragDelta="BottomRightThumb_DragDelta"
+            PointerEntered="NwSe_PointerEntered"
+            PointerExited="EdgeThumb_PointerExited"
+            Template="{StaticResource InvisibleThumbTemplate}" />
     </Grid>
-</ContentDialog>
+</UserControl>

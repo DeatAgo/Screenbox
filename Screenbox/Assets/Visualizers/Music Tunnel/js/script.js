@@ -3,21 +3,26 @@ const trackContainer = document.getElementById("track-container");
 const albumart = document.getElementById("albumart");
 const headerTitle = document.getElementById("track-title");
 const headerArtist = document.getElementById("track-artist");
+
 let currentTextureSrc = null;
-let currentCircleRadius = 0;
+let latestRequestedSrc = null;
+let fallbackTimer = null;
 let clock = new THREE.Clock();
 const gui = new dat.GUI();
-// is first texture in use in use for transition
+// is first texture in use for transition
 let isTexture0 = false;
 // transition animation queue
 let textureQueue = Promise.resolve();
 let isPaused = false,
   elapsedResetTime = 21600,
   elapsedPreviousTime = 0;
+
 const colorThief = new ColorThief();
 const backgroundSrcDefault = "media/background.jpg";
-
 let scene, camera, renderer, material;
+let isRenderLoopRunning = false;
+let pendingTrackData = undefined;
+
 let settings = {
   scale: 1,
   debug: false,
@@ -36,10 +41,6 @@ async function init() {
   scene = new THREE.Scene();
   camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  //caching for textureloader
-  //ref: https://threejs.org/docs/#api/en/loaders/Cache
-  THREE.Cache.enabled = true;
-
   material = new THREE.ShaderMaterial({
     uniforms: {
       u_tex0: { type: "t" },
@@ -57,41 +58,48 @@ async function init() {
       u_center_color: { type: "c", value: { r: 0, g: 0, b: 0 } },
     },
     vertexShader: `
-          varying vec2 vUv;        
-          void main() {
-              vUv = uv;
-              gl_Position = vec4( position, 1.0 );    
-          }
-        `,
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4( position, 1.0 );
+      }
+    `,
   });
   material.fragmentShader = await (await fetch("shaders/tunnel.frag")).text();
 
-  // Not required, livelyCurrentTrack fn is called once page is initialized.
-  //setTexture(backgroundSrcDefault);
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 1, 1), material);
   scene.add(quad);
 
   if (settings.debug) {
-    //createWebUI();
     gui.show();
   } else {
     gui.hide();
   }
 
-  //start animation
-  render();
+  // Replay any track update that arrived before shader initialization finished
+  if (pendingTrackData !== undefined) {
+    const queued = pendingTrackData;
+    pendingTrackData = undefined;
+    await livelyCurrentTrack(queued);
+  }
+
+  if (!isRenderLoopRunning) {
+    isRenderLoopRunning = true;
+    render();
+  }
 }
 
-window.addEventListener("resize", function (e) {
+window.addEventListener("resize", function () {
+  if (!renderer || !material) return;
   renderer.setSize(window.innerWidth, window.innerHeight);
   material.uniforms.u_resolution.value = new THREE.Vector2(
     window.innerWidth * settings.scale,
     window.innerHeight * settings.scale
-    );
-   render();
+  );
+  renderer.render(scene, camera);
 });
 
-//parallax
+// parallax
 document.addEventListener("mousemove", function (event) {
   if (settings.parallaxVal == 0) return;
 
@@ -105,6 +113,7 @@ function setScale(value) {
   if (settings.scale == value) return;
 
   settings.scale = value;
+  if (!renderer || !material) return;
   renderer.setPixelRatio(settings.scale);
   material.uniforms.u_resolution.value = new THREE.Vector2(
     window.innerWidth * settings.scale,
@@ -117,7 +126,6 @@ function render() {
     requestAnimationFrame(render);
   }, 1000 / settings.fps);
 
-  //reset every 6hr
   if (clock.getElapsedTime() > elapsedResetTime) clock = new THREE.Clock();
   material.uniforms.u_time.value = clock.getElapsedTime();
 
@@ -127,7 +135,7 @@ function render() {
 init();
 
 function livelyWallpaperPlaybackChanged(data) {
-  var obj = JSON.parse(data);
+  var obj = typeof data === "string" ? JSON.parse(data) : data;
   isPaused = obj.IsPaused;
 
   if (isPaused) {
@@ -140,8 +148,8 @@ function livelyWallpaperPlaybackChanged(data) {
   }
 }
 
-//docs: https://github.com/rocksdanister/lively/wiki/Web-Guide-IV-:-Interaction
 function livelyPropertyListener(name, val) {
+  if (!material) return;
   switch (name) {
     case "speed":
       material.uniforms.u_speed.value = val;
@@ -168,75 +176,117 @@ function livelyPropertyListener(name, val) {
 }
 
 async function livelyCurrentTrack(data) {
-  let obj = JSON.parse(data);
-  //when no track is playing its null
-  if (obj) {
-    headerTitle.innerText = obj.Title;
-    headerArtist.innerText = obj.Artist;
+  if (!material) {
+    pendingTrackData = data;
+    return;
+  }
 
-    if (obj.Thumbnail) {
+  let obj = typeof data === "string" ? JSON.parse(data) : data;
+  if (obj) {
+    headerTitle.innerText = obj.Title || "";
+    headerArtist.innerText = obj.Artist || "";
+
+    if (obj.Thumbnail && obj.Thumbnail.length > 0) {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+
       const base64String = !obj.Thumbnail.startsWith("data:image/")
         ? "data:image/png;base64," + obj.Thumbnail
         : obj.Thumbnail;
 
-      setTexture(base64String);
       albumart.src = base64String;
+      setTexture(base64String);
     } else {
-      setTexture(backgroundSrcDefault);
-      albumart.src = backgroundSrcDefault;
+      // Wait briefly for async video thumbnail extraction before showing default purple fallback
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      fallbackTimer = setTimeout(() => {
+        fallbackTimer = null;
+        albumart.src = backgroundSrcDefault;
+        setTexture(backgroundSrcDefault);
+      }, 450);
     }
 
-    if (material) material.uniforms.u_center.value = true;
+    material.uniforms.u_center.value = true;
     trackContainer.style.opacity = 1;
   } else {
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+    albumart.src = backgroundSrcDefault;
     setTexture(backgroundSrcDefault);
-    if (material) material.uniforms.u_center.value = false;
-
+    material.uniforms.u_center.value = false;
     trackContainer.style.opacity = 0;
   }
 }
 
 albumart.addEventListener("load", function () {
-  let color = colorThief.getPalette(albumart, 6);
-  color.unshift(colorThief.getColor(albumart));
+  try {
+    let color = colorThief.getPalette(albumart, 6);
+    color.unshift(colorThief.getColor(albumart));
 
-  let mainColor = `rgb(${color[1].toString()}`; //assume
-  let minc = -999;
-  for (let i = 1; i < color.length; i++) {
-    let tmp = contrast(color[0], color[i]);
-    if (tmp > minc) {
-      minc = tmp;
-      mainColor = `rgb(${color[i].toString()}`;
+    let mainColor = `rgb(${color[1].toString()})`;
+    let minc = -999;
+    for (let i = 1; i < color.length; i++) {
+      let tmp = contrast(color[0], color[i]);
+      if (tmp > minc) {
+        minc = tmp;
+        mainColor = `rgb(${color[i].toString()})`;
+      }
     }
-  }
 
-  setColor(mainColor, `rgb(${color[0].toString()})`);
+    setColor(mainColor, `rgb(${color[0].toString()})`);
+  } catch (e) {
+    // Ignore ColorThief errors on fallback/unloaded images
+  }
+});
+
+albumart.addEventListener("error", function () {
+  if (!albumart.src.endsWith(backgroundSrcDefault)) {
+    albumart.src = backgroundSrcDefault;
+  }
 });
 
 async function setTexture(src) {
+  latestRequestedSrc = src;
   if (src === currentTextureSrc) return;
-  currentTextureSrc = src;
 
   const currentOperation = textureQueue.then(async () => {
-    if (material == null) return;
+    if (material == null || src !== latestRequestedSrc || src === currentTextureSrc) return;
 
     return new Promise((resolve) => {
-      new THREE.TextureLoader().load(src, async function (tex) {
-        tex.wrapS = THREE.MirroredRepeatWrapping;
-        tex.wrapT = THREE.MirroredRepeatWrapping;
+      new THREE.TextureLoader().load(
+        src,
+        async function (tex) {
+          if (src !== latestRequestedSrc) {
+            tex.dispose();
+            resolve();
+            return;
+          }
 
-        if (isTexture0) material.uniforms.u_tex0.value = tex;
-        else material.uniforms.u_tex1.value = tex;
+          currentTextureSrc = src;
+          tex.wrapS = THREE.MirroredRepeatWrapping;
+          tex.wrapT = THREE.MirroredRepeatWrapping;
 
-        await showTransition(isTexture0);
-        isTexture0 = !isTexture0;
+          if (isTexture0) material.uniforms.u_tex0.value = tex;
+          else material.uniforms.u_tex1.value = tex;
 
-        resolve();
-      });
+          await showTransition(isTexture0);
+          isTexture0 = !isTexture0;
+
+          resolve();
+        },
+        undefined,
+        function () {
+          // Always resolve on error so textureQueue never deadlocks
+          resolve();
+        }
+      );
     });
   });
 
-  // Update to the latest operation
   textureQueue = currentOperation;
 }
 
@@ -270,31 +320,12 @@ async function showTransition(isTexture0) {
   });
 }
 
-// async function showTransitionScreenshot() {
-//   renderer.render(scene, camera); //WebGLRenderer.preserveDrawingBuffer is false.
-//   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 1, 1));
-//   let screenShot = renderer.domElement.toDataURL();
-//   const texture = new THREE.TextureLoader().load(screenShot);
-//   quad.material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 1.0 });
-//   scene.add(quad);
-
-//   for (let val = 1; val >= 0; val -= 0.1) {
-//     quad.material.opacity = val;
-//     await new Promise((r) => setTimeout(r, 50));
-//   }
-
-//   texture.dispose();
-//   scene.remove(quad);
-//   URL.revokeObjectURL(screenShot);
-// }
-
 function setColor(mainColor, shadowColor) {
-  document.documentElement.style.setProperty("--mainColor", mainColor); //highest contrast compared to dominant color
-  document.documentElement.style.setProperty("--shadowColor", shadowColor); //dominant color
+  document.documentElement.style.setProperty("--mainColor", mainColor);
+  document.documentElement.style.setProperty("--shadowColor", shadowColor);
   if (material != null) material.uniforms.u_center_color.value = new THREE.Color(shadowColor);
 }
 
-//ref: https://stackoverflow.com/questions/9733288/how-to-programmatically-calculate-the-contrast-ratio-between-two-colors
 function luminance(r, g, b) {
   var a = [r, g, b].map(function (v) {
     v /= 255;

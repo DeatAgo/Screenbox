@@ -5,6 +5,7 @@
     xmlns:behaviors="using:Screenbox.Behaviors"
     xmlns:commands="using:Screenbox.Commands"
     xmlns:controls="using:Screenbox.Controls"
+    xmlns:ctAnimations="using:CommunityToolkit.WinUI.Animations"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:flyouts="using:Screenbox.Flyouts"
     xmlns:helpers="using:Screenbox.Helpers"
@@ -25,6 +26,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <commands:BindableCommand x:Key="PlayCommand" Command="{x:Bind ViewModel.PlayCommand}" />
+            <commands:SelectDeselectAllCommand x:Key="SelectDeselectAllCommand" />
 
             <flyouts:MediaMenuFlyout
                 x:Key="ItemFlyout"
@@ -33,8 +35,19 @@
                 IsAdvancedModeEnabled="{x:Bind Common.IsAdvancedModeEnabled}"
                 PlayCommand="{x:Bind ViewModel.PlayCommand}"
                 PlayNextCommand="{x:Bind Common.PlayNextCommand}"
-                RemoveCommand="{x:Bind ViewModel.RemoveCommand}">
+                RemoveCommand="{x:Bind ViewModel.RemoveCommand}"
+                SelectCommand="{x:Bind ViewModel.Selection.SelectItemCommand}">
                 <flyouts:MediaMenuFlyout.AdditionalItems>
+                    <MenuFlyoutItem
+                        Command="{x:Bind ViewModel.MoveItemUpCommand}"
+                        CommandParameter="{x:Bind ViewModel.ContextMedia, Mode=OneWay}"
+                        Icon="{ui:FontIcon Glyph=&#xE74A;}"
+                        Text="{x:Bind strings:Resources.MoveUp}" />
+                    <MenuFlyoutItem
+                        Command="{x:Bind ViewModel.MoveItemDownCommand}"
+                        CommandParameter="{x:Bind ViewModel.ContextMedia, Mode=OneWay}"
+                        Icon="{ui:FontIcon Glyph=&#xE74B;}"
+                        Text="{x:Bind strings:Resources.MoveDown}" />
                     <MenuFlyoutItem
                         Command="{x:Bind Common.OpenArtistCommand}"
                         CommandParameter="{x:Bind ViewModel.ContextMedia.MainArtist, Mode=OneWay}"
@@ -87,7 +100,6 @@
                     Width="192"
                     Height="192"
                     Margin="0,0,20,0"
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource OverlayCornerRadius}"
@@ -95,12 +107,20 @@
                     Shadow="{StaticResource ElevationThemeShadow}"
                     SizeChanged="CoverArt_OnSizeChanged"
                     Translation="0,0,16">
-                    <FontIcon
-                        x:Name="CoverArtIcon"
-                        FontFamily="{StaticResource ScreenboxSymbolThemeFontFamily}"
-                        FontSize="64"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Glyph="{StaticResource PlaylistGlyph}" />
+                    <Grid.Background>
+                        <ImageBrush ImageSource="{x:Bind ViewModel.Source.Thumbnail, Mode=OneWay}" Stretch="UniformToFill" />
+                    </Grid.Background>
+                    <Border
+                        Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                        CornerRadius="{StaticResource OverlayCornerRadius}"
+                        Visibility="{x:Bind ViewModel.Source.Thumbnail, Mode=OneWay, Converter={StaticResource EmptyObjectToVisibilityConverter}, ConverterParameter=true, FallbackValue=Visible}">
+                        <FontIcon
+                            x:Name="CoverArtIcon"
+                            FontFamily="{StaticResource ScreenboxSymbolThemeFontFamily}"
+                            FontSize="64"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="{StaticResource PlaylistGlyph}" />
+                    </Border>
                 </Grid>
 
                 <StackPanel
@@ -131,6 +151,7 @@
 
                     <Grid x:Name="ButtonPanel">
                         <sbuc:CommandBarEx
+                            x:Name="CommandBar"
                             Margin="-8,8,0,0"
                             HorizontalAlignment="Left"
                             AccessKey="{x:Bind strings:KeyboardResources.CommandMoreOptionsKey}"
@@ -184,6 +205,19 @@
                                 Style="{StaticResource DefaultButtonAppBarButtonStyle}" />
 
                             <AppBarButton
+                                Command="{x:Bind SetPlaylistThumbnailCommand}"
+                                Icon="{ui:FontIcon Glyph=&#xEB9F;}"
+                                Label="Change cover"
+                                Style="{StaticResource DefaultButtonAppBarButtonStyle}" />
+
+                            <AppBarButton
+                                Command="{x:Bind ResetPlaylistThumbnailCommand}"
+                                Icon="{ui:SymbolIcon Symbol=Undo}"
+                                Label="Reset cover"
+                                Style="{StaticResource DefaultButtonAppBarButtonStyle}"
+                                Visibility="{x:Bind ViewModel.Source.HasCustomThumbnail, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}" />
+
+                            <AppBarButton
                                 Command="{x:Bind ExportPlaylistCommand}"
                                 Label="{x:Bind strings:Resources.Export}"
                                 Style="{StaticResource DefaultButtonAppBarButtonStyle}">
@@ -198,6 +232,34 @@
                                 Label="{x:Bind strings:Resources.Delete}"
                                 Style="{StaticResource DefaultButtonAppBarButtonStyle}" />
                         </sbuc:CommandBarEx>
+
+                        <controls:SelectionBarControl
+                            x:Name="SelectionBar"
+                            Margin="0,8,0,0"
+                            ctAnimations:Implicit.HideAnimations="{StaticResource SelectionBarExitImplicitAnimation}"
+                            ctAnimations:Implicit.ShowAnimations="{StaticResource SelectionBarEntranceImplicitAnimation}"
+                            CheckBoxCommand="{StaticResource SelectDeselectAllCommand}"
+                            CheckBoxCommandParameter="{x:Bind ItemList}"
+                            CheckBoxIsChecked="{x:Bind ViewModel.Selection.IsAllSelected, Mode=OneWay}"
+                            CheckBoxText="{x:Bind strings:Resources.ItemsSelected(ViewModel.Selection.SelectedCount), Mode=OneWay}"
+                            CloseButtonCommand="{x:Bind ViewModel.Selection.DisableSelectionModeCommand}"
+                            IsAddToQueueButtonVisible="False"
+                            IsPlayButtonVisible="False"
+                            PlayNextButtonCommand="{x:Bind ViewModel.PlaySelectedNextCommand}"
+                            RemoveButtonCommand="{x:Bind ViewModel.RemoveSelectedCommand}"
+                            Selection="{x:Bind ViewModel.Selection}"
+                            Visibility="Collapsed">
+                            <controls:SelectionBarControl.AdditionalCommands>
+                                <AppBarButton
+                                    Command="{x:Bind ViewModel.MoveSelectedItemUpCommand}"
+                                    Icon="{ui:FontIcon Glyph=&#xE74A;}"
+                                    Label="{x:Bind strings:Resources.MoveUp}" />
+                                <AppBarButton
+                                    Command="{x:Bind ViewModel.MoveSelectedItemDownCommand}"
+                                    Icon="{ui:FontIcon Glyph=&#xE74B;}"
+                                    Label="{x:Bind strings:Resources.MoveDown}" />
+                            </controls:SelectionBarControl.AdditionalCommands>
+                        </controls:SelectionBarControl>
                     </Grid>
                 </StackPanel>
             </Grid>
@@ -215,8 +277,12 @@
             Drop="ItemList_OnDrop"
             IsItemClickEnabled="True"
             ItemsSource="{x:Bind ViewModel.Source.Items, Mode=OneWay}"
+            KeyboardAcceleratorPlacementMode="Hidden"
             SelectionMode="None"
             Style="{StaticResource MediaListViewStyle}">
+            <ListView.Resources>
+                <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+            </ListView.Resources>
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <controls:MediaListViewItem
@@ -231,12 +297,19 @@
             <ListView.Footer>
                 <Border Height="{x:Bind Common.FooterBottomPaddingHeight, Mode=OneWay}" />
             </ListView.Footer>
+            <ListView.KeyboardAccelerators>
+                <KeyboardAccelerator
+                    Key="A"
+                    Invoked="SelectDeselectAllKeyboardAccelerator_OnInvoked"
+                    Modifiers="Control" />
+            </ListView.KeyboardAccelerators>
             <interactivity:Interaction.Behaviors>
                 <behaviors:AlternatingListViewBehavior
                     AlternateBackground="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     AlternateBorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     AlternateBorderThickness="1" />
                 <behaviors:ListViewContextBehavior ContextItem="{x:Bind ViewModel.ContextMedia, Mode=TwoWay}" Flyout="{StaticResource ItemFlyout}" />
+                <behaviors:ListViewSelectionBehavior Selection="{x:Bind ViewModel.Selection}" />
                 <behaviors:BringIntoViewWithOffsetBehavior FromBottom="{x:Bind Common.FooterBottomPaddingHeight, Mode=OneWay}" />
                 <behaviors:FocusOnItemClickBehavior />
             </interactivity:Interaction.Behaviors>
@@ -253,6 +326,19 @@
         </interactivity:Interaction.Behaviors>
 
         <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="SelectionModes">
+                <VisualState x:Name="Multiple">
+                    <VisualState.StateTriggers>
+                        <StateTrigger IsActive="{x:Bind ViewModel.Selection.IsSelectionModeActive, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="CommandBar.Visibility" Value="Collapsed" />
+                        <Setter Target="SelectionBar.Visibility" Value="Visible" />
+                        <Setter Target="ItemList.SelectionMode" Value="Multiple" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
             <VisualStateGroup x:Name="NavigationViewStates">
                 <VisualState x:Name="Expanded" />
                 <VisualState x:Name="Compact" />
@@ -268,6 +354,7 @@
                         <Setter Target="CoverArtIcon.FontSize" Value="52" />
                         <Setter Target="ItemList.Padding" Value="{StaticResource ContentPageMinimalPadding}" />
                         <Setter Target="ListHeaderPadding.Height" Value="72" />
+                        <Setter Target="SelectionBar.DefaultLabelPosition" Value="Collapsed" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -279,7 +366,6 @@
                         <ui:IsNullOrEmptyStateTrigger Value="{x:Bind ViewModel.Source.Items, Mode=OneWay}" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <!--<Setter Target="ItemList.Visibility" Value="Collapsed" />-->
                         <Setter Target="NoPlaylistItemsView.IsOpen" Value="True" />
                     </VisualState.Setters>
                 </VisualState>
@@ -287,4 +373,3 @@
         </VisualStateManager.VisualStateGroups>
     </Grid>
 </Page>
-

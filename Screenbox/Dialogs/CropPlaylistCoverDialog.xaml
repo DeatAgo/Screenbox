@@ -1,0 +1,82 @@
+<ContentDialog
+    x:Class="Screenbox.Dialogs.CropPlaylistCoverDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Crop cover image"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
+    PrimaryButtonText="Save"
+    Style="{StaticResource DefaultContentDialogStyle}"
+    mc:Ignorable="d">
+
+    <StackPanel Spacing="12">
+        <TextBlock
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="Drag or scroll to adjust the square crop area." />
+
+        <Border
+            Width="280"
+            Height="280"
+            HorizontalAlignment="Center"
+            Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource OverlayCornerRadius}">
+            <ScrollViewer
+                x:Name="CropScrollViewer"
+                Width="280"
+                Height="280"
+                HorizontalScrollBarVisibility="Hidden"
+                HorizontalScrollMode="Enabled"
+                IsHorizontalRailEnabled="False"
+                IsVerticalRailEnabled="False"
+                MaxZoomFactor="4"
+                MinZoomFactor="1"
+                VerticalScrollBarVisibility="Hidden"
+                VerticalScrollMode="Enabled"
+                ViewChanged="CropScrollViewer_ViewChanged"
+                ZoomMode="Enabled">
+                <Image
+                    x:Name="PreviewImage"
+                    PointerMoved="PreviewImage_PointerMoved"
+                    PointerPressed="PreviewImage_PointerPressed"
+                    PointerReleased="PreviewImage_PointerReleased"
+                    Stretch="Fill" />
+            </ScrollViewer>
+        </Border>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <FontIcon
+                Grid.Column="0"
+                FontSize="14"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Glyph="&#xE71F;" />
+
+            <Slider
+                x:Name="ZoomSlider"
+                Grid.Column="1"
+                IsThumbToolTipEnabled="False"
+                Maximum="4"
+                Minimum="1"
+                StepFrequency="0.05"
+                ValueChanged="ZoomSlider_ValueChanged"
+                Value="1" />
+
+            <FontIcon
+                Grid.Column="2"
+                FontSize="14"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Glyph="&#xE8A3;" />
+        </Grid>
+    </StackPanel>
+</ContentDialog>

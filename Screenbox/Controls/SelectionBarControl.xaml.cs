@@ -397,6 +397,11 @@ public sealed partial class SelectionBarControl : UserControl
     //    CommandBarCollection_OnCollectionChanged(SelectionCommandBar.SecondaryCommands, e);
     //}
 
+    private void SelectAllCheckBox_OnClick(object sender, RoutedEventArgs e)
+    {
+        SelectAllCheckBox.IsChecked = CheckBoxIsChecked;
+    }
+
     private void DeleteKeyboardAccelerator_OnInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         if (!IsRemoveButtonVisible) return;

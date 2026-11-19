@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -16,13 +17,18 @@ using Screenbox.Core.Helpers;
 using Screenbox.Core.Messages;
 using Screenbox.Core.Models;
 using Screenbox.Core.Services;
+using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.System;
+using Windows.UI.Xaml.Media.Imaging;
 
 namespace Screenbox.Core.ViewModels;
 
 public sealed partial class PlaylistViewModel : ObservableRecipient,
     IRecipient<QueuePlaybackStateChangedMessage>
 {
+    private const string CustomThumbnailsFolderName = "PlaylistThumbnails";
+
     public ObservableCollection<MediaViewModel> Items { get; } = new();
 
     public double ItemsCount => Items.Count;    // For binding
@@ -30,14 +36,20 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
     [ObservableProperty] public partial string Name { get; set; } = string.Empty;
     [ObservableProperty] public partial bool IsPlaying { get; set; }
     [ObservableProperty] public partial bool IsQueueActive { get; set; }
-    [ObservableProperty] public partial object? Thumbnail { get; set; }
+    [ObservableProperty] public partial BitmapImage? Thumbnail { get; set; }
+    [ObservableProperty] public partial bool HasCustomThumbnail { get; set; }
     [ObservableProperty] public partial DateTimeOffset LastUpdated { get; set; } = DateTimeOffset.Now;
 
     public string Id => _id.ToString();
 
+    public string? CustomThumbnailPath => _customThumbnailPath;
+
     private bool HasItems => Items.Count > 0;
 
     private Guid _id = Guid.NewGuid();
+    private MediaViewModel? _coverItem;
+    private string? _customThumbnailPath;
+    private BitmapImage? _customThumbnailImage;
 
     private readonly IPlaylistService _playlistService;
     private readonly MediaViewModelFactory _mediaFactory;
@@ -81,6 +93,7 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
     private void Items_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(ItemsCount));
+        UpdateCoverItem();
 
         _playlistSaveTimer.Debounce(async () =>
         {
@@ -100,6 +113,200 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
         }, TimeSpan.FromMilliseconds(50));
     }
 
+    private void UpdateCoverItem()
+    {
+        MediaViewModel? firstItem = Items.FirstOrDefault();
+        if (!ReferenceEquals(_coverItem, firstItem))
+        {
+            if (_coverItem is not null)
+            {
+                _coverItem.PropertyChanged -= CoverItem_PropertyChanged;
+            }
+
+            _coverItem = firstItem;
+
+            if (_coverItem is not null)
+            {
+                _coverItem.PropertyChanged += CoverItem_PropertyChanged;
+            }
+        }
+
+        if (_customThumbnailImage is not null)
+        {
+            Thumbnail = _customThumbnailImage;
+            return;
+        }
+
+        if (_coverItem is null)
+        {
+            Thumbnail = null;
+            return;
+        }
+
+        Thumbnail = _coverItem.Thumbnail;
+        if (Thumbnail is null)
+        {
+            _ = LoadCoverThumbnailAsync(_coverItem);
+        }
+    }
+
+    private async Task LoadCoverThumbnailAsync(MediaViewModel item)
+    {
+        try
+        {
+            await item.LoadThumbnailAsync();
+            if (_customThumbnailImage is null && ReferenceEquals(_coverItem, item))
+            {
+                Thumbnail = item.Thumbnail;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to load playlist cover thumbnail.");
+        }
+    }
+
+    private void CoverItem_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MediaViewModel.Thumbnail) &&
+            _customThumbnailImage is null &&
+            sender is MediaViewModel media)
+        {
+            Thumbnail = media.Thumbnail;
+        }
+    }
+
+    public async Task SetCustomThumbnailAsync(StorageFile sourceFile)
+    {
+        ArgumentNullException.ThrowIfNull(sourceFile);
+
+        StorageFolder thumbnailsFolder = await ApplicationData.Current.LocalFolder.CreateFolderAsync(
+            CustomThumbnailsFolderName,
+            CreationCollisionOption.OpenIfExists);
+
+        StorageFile storedFile;
+        if (sourceFile.Path.StartsWith(thumbnailsFolder.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            storedFile = sourceFile;
+        }
+        else
+        {
+            string extension = string.IsNullOrWhiteSpace(sourceFile.FileType) ? ".png" : sourceFile.FileType;
+            string destinationName = $"{Id}_{Guid.NewGuid():N}{extension}";
+            storedFile = await sourceFile.CopyAsync(
+                thumbnailsFolder,
+                destinationName,
+                NameCollisionOption.ReplaceExisting);
+        }
+
+        BitmapImage image = await DecodeBitmapImageAsync(storedFile);
+
+        string? oldPath = _customThumbnailPath;
+        _customThumbnailPath = storedFile.Path;
+        _customThumbnailImage = image;
+        HasCustomThumbnail = true;
+        Thumbnail = image;
+
+        await SaveAsync();
+
+        if (!string.IsNullOrEmpty(oldPath) && !string.Equals(oldPath, _customThumbnailPath, StringComparison.OrdinalIgnoreCase))
+        {
+            DeleteFileQuietly(oldPath);
+        }
+    }
+
+    public async Task ClearCustomThumbnailAsync()
+    {
+        string? oldPath = _customThumbnailPath;
+        _customThumbnailPath = null;
+        _customThumbnailImage = null;
+        HasCustomThumbnail = false;
+
+        UpdateCoverItem();
+        await SaveAsync();
+
+        if (!string.IsNullOrEmpty(oldPath))
+        {
+            DeleteFileQuietly(oldPath);
+        }
+    }
+
+    public void DeleteStoredThumbnailFile()
+    {
+        string? oldPath = _customThumbnailPath;
+        _customThumbnailPath = null;
+        _customThumbnailImage = null;
+        HasCustomThumbnail = false;
+
+        if (!string.IsNullOrEmpty(oldPath))
+        {
+            DeleteFileQuietly(oldPath);
+        }
+    }
+
+    private async Task LoadCustomThumbnailFromPathAsync(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                _customThumbnailPath = null;
+                _customThumbnailImage = null;
+                HasCustomThumbnail = false;
+                UpdateCoverItem();
+                return;
+            }
+
+            StorageFile file = await StorageFile.GetFileFromPathAsync(path);
+            BitmapImage image = await DecodeBitmapImageAsync(file);
+
+            if (string.Equals(_customThumbnailPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                _customThumbnailImage = image;
+                HasCustomThumbnail = true;
+                Thumbnail = image;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load custom playlist thumbnail from '{Path}'.", path);
+            if (string.Equals(_customThumbnailPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                _customThumbnailPath = null;
+                _customThumbnailImage = null;
+                HasCustomThumbnail = false;
+                UpdateCoverItem();
+            }
+        }
+    }
+
+    private static async Task<BitmapImage> DecodeBitmapImageAsync(StorageFile file)
+    {
+        using IRandomAccessStream stream = await file.OpenReadAsync();
+        BitmapImage image = new()
+        {
+            DecodePixelType = DecodePixelType.Logical,
+            DecodePixelHeight = 400
+        };
+        await image.SetSourceAsync(stream);
+        return image;
+    }
+
+    private void DeleteFileQuietly(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete custom playlist thumbnail '{Path}'.", path);
+        }
+    }
+
     public QueueSession ToQueueSession()
     {
         return new QueueSession(0, Items)
@@ -113,6 +320,10 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
         if (!Guid.TryParse(persistentPlaylist.Id, out _id)) return;
         Name = persistentPlaylist.DisplayName;
         LastUpdated = persistentPlaylist.LastUpdated;
+        _customThumbnailPath = persistentPlaylist.CustomThumbnailPath;
+        _customThumbnailImage = null;
+        HasCustomThumbnail = !string.IsNullOrEmpty(_customThumbnailPath);
+
         Items.Clear();
 
         var request = new QueuePlaybackStateRequestMessage();
@@ -135,11 +346,27 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
             }
             catch { }
         }
+
+        if (!string.IsNullOrEmpty(_customThumbnailPath))
+        {
+            _ = LoadCustomThumbnailFromPathAsync(_customThumbnailPath);
+        }
+        else
+        {
+            UpdateCoverItem();
+        }
     }
 
     public async Task SaveAsync()
     {
         LastUpdated = DateTimeOffset.Now;
+        var persistentPlaylist = ToPersistentPlaylist();
+        await _playlistService.SavePlaylistAsync(persistentPlaylist);
+    }
+
+    public async Task SaveWithTimestampAsync(DateTimeOffset timestamp)
+    {
+        LastUpdated = timestamp;
         var persistentPlaylist = ToPersistentPlaylist();
         await _playlistService.SavePlaylistAsync(persistentPlaylist);
     }
@@ -197,7 +424,8 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
             Items.Add(Items.Contains(item) ? new MediaViewModel(item) : item);
         }
 
-        //await SaveAsync();
+        _playlistSaveTimer.Stop();
+        await SaveAsync();
         Messenger.Send(new NotificationMessage(NotificationLevel.Success, NotificationKind.PlaylistItemsAdded, title: Name, numericValue: items.Count));
     }
 
@@ -218,7 +446,8 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
             }
         }
 
-        //await SaveAsync();
+        _playlistSaveTimer.Stop();
+        await SaveAsync();
         Messenger.Send(new NotificationMessage(NotificationLevel.Success, NotificationKind.PlaylistItemsAdded, title: Name, numericValue: items.Count));
     }
 
@@ -228,6 +457,7 @@ public sealed partial class PlaylistViewModel : ObservableRecipient,
         {
             Id = _id.ToString(),
             DisplayName = Name,
+            CustomThumbnailPath = _customThumbnailPath,
             LastUpdated = LastUpdated,
             Items = Items.Select(RawMediaRecordDto.FromMediaViewModel).ToList()
         };

@@ -5,7 +5,9 @@ using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using CommunityToolkit.WinUI.Animations.Expressions;
+using Screenbox.Commands;
 using Screenbox.Core;
+using Screenbox.Core.Services;
 using Screenbox.Core.ViewModels;
 using Screenbox.Dialogs;
 using Screenbox.Extensions;
@@ -16,6 +18,7 @@ using Windows.UI.Composition;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Hosting;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
 using EF = CommunityToolkit.WinUI.Animations.Expressions.ExpressionFunctions;
 using NavigationViewDisplayMode = Windows.UI.Xaml.Controls.NavigationViewDisplayMode;
@@ -44,33 +47,53 @@ public sealed partial class PlaylistDetailsPage : Page
     private CompositionPropertySet? _props;
     private CompositionPropertySet? _scrollerPropertySet;
     private Compositor? _compositor;
-    //private SpriteVisual? _backgroundVisual;
     private ScrollViewer? _scrollViewer;
+    private readonly IFilesService _filesService;
+    private readonly SelectDeselectAllCommand _selectionCommand;
 
     public PlaylistDetailsPage()
     {
         this.InitializeComponent();
         DataContext = Ioc.Default.GetRequiredService<PlaylistDetailsPageViewModel>();
         Common = Ioc.Default.GetRequiredService<CommonViewModel>();
+        _filesService = Ioc.Default.GetRequiredService<IFilesService>();
+        _selectionCommand = new SelectDeselectAllCommand();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ViewModel.SubtextChanged += ViewModel_SubtextChanged;
         ViewModel.OnNavigatedTo(e.Parameter);
+        UpdateCaptionText();
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        ViewModel.SubtextChanged -= ViewModel_SubtextChanged;
+    }
+
+    private void ViewModel_SubtextChanged(object? sender, EventArgs e)
+    {
+        UpdateCaptionText();
+    }
+
+    private void UpdateCaptionText()
+    {
+        CaptionText.Text = ViewModel.Source is null
+            ? string.Empty
+            : GetSubtext(ViewModel.Source.Items);
     }
 
     private void PlaylistDetailsPage_OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Retrieve the ScrollViewer that the ListView is using internally
         ScrollViewer scrollViewer = _scrollViewer = ItemList.FindDescendant<ScrollViewer>() ??
                                                     throw new Exception("Cannot find ScrollViewer in ListView");
 
-        // Get the PropertySet that contains the scroll values from the ScrollViewer
         _scrollerPropertySet = ElementCompositionPreview.GetScrollViewerManipulationPropertySet(scrollViewer);
         _compositor = _scrollerPropertySet.Compositor;
 
-        // Create a PropertySet that has values to be referenced in the ExpressionAnimations below
         _props = _compositor.CreatePropertySet();
         _props.InsertScalar("progress", 0);
         _props.InsertScalar("clampSize", ClampSize);
@@ -79,10 +102,19 @@ public sealed partial class PlaylistDetailsPage : Page
         _props.InsertScalar("buttonPanelOffset", ButtonPanelOffset);
         _props.InsertScalar("headerPadding", 12);
 
-        // Get references to our property sets for use with ExpressionNodes
         ManipulationPropertySetReferenceNode scrollingProperties = _scrollerPropertySet.GetSpecializedReference<ManipulationPropertySetReferenceNode>();
 
         CreateHeaderAnimation(_props, scrollingProperties.Translation.Y);
+    }
+
+    private void SelectDeselectAllKeyboardAccelerator_OnInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (ViewModel.HasItems)
+        {
+            ViewModel.Selection.IsSelectionModeActive = true;
+            _selectionCommand.ToggleSelection(ItemList);
+            args.Handled = true;
+        }
     }
 
     private void ItemList_OnDragOver(object sender, DragEventArgs e)
@@ -122,64 +154,48 @@ public sealed partial class PlaylistDetailsPage : Page
         ScalarNode buttonPanelOffsetNode = props.GetScalarProperty("buttonPanelOffset");
         ScalarNode headerPaddingNode = props.GetScalarProperty("headerPadding");
 
-        // Create and start an ExpressionAnimation to track scroll progress over the desired distance
         ExpressionNode progressAnimation = EF.Clamp(-scrollVerticalOffset / clampSizeNode, 0, 1);
         propSet.StartAnimation("progress", progressAnimation);
 
-        // Get the backing visual for the background in the header so that its properties can be animated
         Visual backgroundVisual = ElementCompositionPreview.GetElementVisual(BackgroundAcrylic);
 
-        // Create and start an ExpressionAnimation to scale and opacity fade in the backgound behind the header
         ExpressionNode backgroundScaleAnimation = EF.Lerp(1, backgroundScaleFactorNode, progressNode);
         ExpressionNode backgroundOpacityAnimation = progressNode;
         backgroundVisual.StartAnimation("Scale.Y", backgroundScaleAnimation);
         backgroundVisual.StartAnimation("Opacity", backgroundOpacityAnimation);
 
-        // Get the backing visuals for the content container so that its properties can be animated
         Visual contentVisual = ElementCompositionPreview.GetElementVisual(ContentContainer);
         ElementCompositionPreview.SetIsTranslationEnabled(ContentContainer, true);
 
-        // Create and start an ExpressionAnimation to move the content container with scroll position
         ExpressionNode contentTranslationAnimation = progressNode * headerPaddingNode;
         contentVisual.StartAnimation("Translation.Y", contentTranslationAnimation);
 
-        // Get the backing visual for the cover art visual so that its properties can be animated
         Visual coverArtVisual = ElementCompositionPreview.GetElementVisual(CoverArt);
         ElementCompositionPreview.SetIsTranslationEnabled(CoverArt, true);
 
-        // Create and start an ExpressionAnimation to scale and move the cover art with scroll position
         ExpressionNode coverArtScaleAnimation = EF.Lerp(1, coverScaleFactorNode, progressNode);
         ExpressionNode coverArtTranslationAnimation = progressNode * headerPaddingNode;
         coverArtVisual.StartAnimation("Scale.X", coverArtScaleAnimation);
         coverArtVisual.StartAnimation("Scale.Y", coverArtScaleAnimation);
         coverArtVisual.StartAnimation("Translation.X", coverArtTranslationAnimation);
 
-        // Get the backing visual for the text panel so that its properties can be animated
         Visual textVisual = ElementCompositionPreview.GetElementVisual(TextPanel);
         ElementCompositionPreview.SetIsTranslationEnabled(TextPanel, true);
 
-        // Create and start an ExpressionAnimation to move the text panel with scroll position
         ExpressionNode textTranslationAnimation = progressNode * (-clampSizeNode + headerPaddingNode);
         textVisual.StartAnimation("Translation.X", textTranslationAnimation);
 
-        // Get backing visuals for the additional text blocks so that their properties can be animated
-        //Visual subtitleVisual = ElementCompositionPreview.GetElementVisual(SubtitleText);
         Visual captionVisual = ElementCompositionPreview.GetElementVisual(CaptionText);
 
-        // Create an ExpressionAnimation that start opacity fade out animation with threshold for the additional text blocks
         ScalarNode fadeThreshold = ExpressionValues.Constant.CreateConstantScalar("fadeThreshold", 0.6f);
         ExpressionNode textFadeAnimation = 1 - EF.Conditional(progressNode < fadeThreshold, progressNode / fadeThreshold, 1);
 
-        // Start opacity fade out animation on the additional text block visuals
-        //subtitleVisual.StartAnimation("Opacity", textFadeAnimation);
         textFadeAnimation.SetScalarParameter("fadeThreshold", 0.2f);
         captionVisual.StartAnimation("Opacity", textFadeAnimation);
 
-        // Get the backing visual for the button panel so that its properties can be animated
         Visual buttonVisual = ElementCompositionPreview.GetElementVisual(ButtonPanel);
         ElementCompositionPreview.SetIsTranslationEnabled(ButtonPanel, true);
 
-        // Create and start an ExpressionAnimation to move the button panel with scroll position
         ExpressionNode buttonTranslationAnimation = progressNode * (-buttonPanelOffsetNode);
         buttonVisual.StartAnimation("Translation.Y", buttonTranslationAnimation);
     }
@@ -194,8 +210,6 @@ public sealed partial class PlaylistDetailsPage : Page
 
     private void BackgroundHost_OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        //if (_backgroundVisual == null) return;
-        //_backgroundVisual.Size = new Vector2((float)e.NewSize.Width, BackgroundVisualHeight);
     }
 
     private Thickness GetScrollbarVerticalMargin(Thickness value)
@@ -242,6 +256,33 @@ public sealed partial class PlaylistDetailsPage : Page
     }
 
     [RelayCommand]
+    private async Task SetPlaylistThumbnailAsync()
+    {
+        if (ViewModel.Source == null) return;
+        StorageFile? file = await _filesService.PickFileAsync(".png", ".jpg", ".jpeg", ".webp", ".bmp");
+        if (file is null) return;
+
+        StorageFolder thumbnailsFolder = await ApplicationData.Current.LocalFolder.CreateFolderAsync(
+            "PlaylistThumbnails",
+            CreationCollisionOption.OpenIfExists);
+
+        StorageFile? croppedFile = await CropPlaylistCoverDialog.CropAndSaveAsync(
+            file,
+            thumbnailsFolder,
+            $"{ViewModel.Source.Id}_{Guid.NewGuid():N}");
+
+        if (croppedFile is null) return;
+        await ViewModel.Source.SetCustomThumbnailAsync(croppedFile);
+    }
+
+    [RelayCommand]
+    private async Task ResetPlaylistThumbnailAsync()
+    {
+        if (ViewModel.Source == null) return;
+        await ViewModel.Source.ClearCustomThumbnailAsync();
+    }
+
+    [RelayCommand]
     private async Task DeletePlaylistAsync()
     {
         if (ViewModel.Source == null) return;
@@ -249,6 +290,7 @@ public sealed partial class PlaylistDetailsPage : Page
         var result = await deleteConfirmation.ShowAsync();
         if (result == ContentDialogResult.Primary)
         {
+            ViewModel.Source.DeleteStoredThumbnailFile();
             bool deleted = await ViewModel.DeletePlaylistAsync();
             if (deleted && Frame.CanGoBack)
             {

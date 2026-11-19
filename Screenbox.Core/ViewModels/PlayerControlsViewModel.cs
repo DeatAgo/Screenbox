@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Threading.Tasks;
@@ -29,23 +30,15 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
     IRecipient<PropertyChangedMessage<WindowViewMode>>,
     IRecipient<QueueCanNavigateChangedMessage>
 {
-    /// <summary>
-    /// The observable play queue state. Bind to this for <c>Items</c>,
-    /// <c>CurrentItem</c>, <c>ShuffleMode</c>, and <c>RepeatMode</c>.
-    /// </summary>
     public PlayQueueContext PlayQueue { get; }
 
     public bool ShouldBeAdaptive => !IsCompact && SystemInformation.IsDesktop;
 
-    /// <summary>
-    /// Gets a value that indicates whether the current playback item has exactly one subtitle track.
-    /// </summary>
-    /// <value><see langword="true"/> if the current playback item has exactly one subtitle track; otherwise, <see langword="false"/>.</value>
     public bool HasSingleSubtitleTrackCount => MediaPlayer?.PlaybackItem is { SubtitleTracks.Count: 1 };
 
     [ObservableProperty] public partial bool IsPlaying { get; set; }
     [ObservableProperty] public partial bool IsFullscreen { get; set; }
-    [ObservableProperty] public partial string? TitleName { get; set; } // TODO: Handle VLC title name
+    [ObservableProperty] public partial string? TitleName { get; set; }
     [ObservableProperty] public partial bool IsAdvancedModeActive { get; set; }
     [ObservableProperty] public partial bool IsMinimal { get; set; }
     [ObservableProperty] public partial bool PlayerShowChapters { get; set; }
@@ -56,12 +49,24 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
     public partial bool IsCompact { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanToggleAudioOnly))]
     [NotifyCanExecuteChangedFor(nameof(SaveSnapshotCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleAudioOnlyCommand))]
     public partial bool HasVideo { get; set; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand))]
     public partial bool HasActiveItem { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanToggleAudioOnly))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleAudioOnlyCommand))]
+    public partial bool IsAudioOnly { get; set; }
+
+    public bool CanToggleAudioOnly =>
+        IsAudioOnly || (MediaPlayer?.PlaybackItem is { VideoTracks.Count: > 0 });
+
+    private int _lastVideoTrackIndex;
 
     private IMediaPlayer? MediaPlayer => _playerContext.MediaPlayer;
 
@@ -71,6 +76,7 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
     private readonly PlayerContext _playerContext;
     private readonly IFilesService _filesService;
     private readonly IPlayQueueCoordinator _coordinator;
+    private readonly IPlayQueueBufferManager _bufferManager;
 
     private Size _aspectRatio;
 
@@ -78,6 +84,7 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         PlayQueueContext playQueue,
         IFilesService filesService,
         IPlayQueueCoordinator coordinator,
+        IPlayQueueBufferManager bufferManager,
         PlayerSettingsContext playerSettings,
         IWindowService windowService,
         PlayerContext playerContext)
@@ -88,12 +95,15 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         _playerContext = playerContext;
         _filesService = filesService;
         _coordinator = coordinator;
+        _bufferManager = bufferManager;
+        IsAudioOnly = playerSettings.IsAudioOnly;
         IsAdvancedModeActive = playerSettings.AdvancedMode;
         IsMinimal = true;
         IsDisplayingRemainingTime = playerSettings.ShowRemainingTime;
         PlayerShowChapters = playerSettings.ShowChapters;
         PlayQueue = playQueue;
         PlayQueue.PropertyChanged += PlayQueueOnPropertyChanged;
+        PlayQueue.Items.CollectionChanged += PlayQueueOnCollectionChanged;
 
         if (MediaPlayer != null)
         {
@@ -175,9 +185,6 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         IsMinimal = message.NewValue != PlayerVisibilityState.Visible;
     }
 
-    /// <summary>
-    /// Handles toggling the playback state.
-    /// </summary>
     public void HandlePlaybackStateToggleKey()
     {
         if (!HasActiveItem)
@@ -186,18 +193,6 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         Messenger.Send(new TogglePlayPauseMessage(showBadge: true));
     }
 
-    /// <summary>
-    /// Handles track navigation based on keyboard input.
-    /// </summary>
-    /// <remarks>
-    /// The following keys determine the resize action:
-    /// <list type="bullet">
-    /// <item><description><see cref="VirtualKey.PageUp"/>, or <see cref="VirtualKey.P"/> with <see cref="VirtualKeyModifiers.Shift"/>: Navigate to the previous track.</description></item>
-    /// <item><description><see cref="VirtualKey.PageDown"/>, or <see cref="VirtualKey.N"/> with <see cref="VirtualKeyModifiers.Shift"/>: Navigate to the next track.</description></item>
-    /// </list>
-    /// </remarks>
-    /// <param name="key">The key that was pressed.</param>
-    /// <param name="modifiers">The modifier keys held during the key press.</param>
     public void HandleTrackNavigationKey(VirtualKey key, VirtualKeyModifiers modifiers)
     {
         if (!HasActiveItem || MediaPlayer is null)
@@ -218,18 +213,6 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         }
     }
 
-    /// <summary>
-    /// Handles toggling the subtitle track during media playback based on keyboard input.
-    /// </summary>
-    /// <remarks>
-    /// The following modifiers determine the toggle action:
-    /// <list type="bullet">
-    /// <item><description><see cref="VirtualKeyModifiers.None"/> toggles the only subtitle track on or off.</description></item>
-    /// <item><description><see cref="VirtualKeyModifiers.Control"/> cycles forward through the available subtitle tracks.</description></item>
-    /// <item><description><see cref="VirtualKeyModifiers.Control"/> + <see cref="VirtualKeyModifiers.Shift"/> cycles backward through the available subtitle tracks.</description></item>
-    /// </list>
-    /// </remarks>
-    /// <param name="modifiers">The modifier keys held during the key press.</param>
     public void HandleSubtitleToggleKey(VirtualKeyModifiers modifiers)
     {
         if (MediaPlayer?.PlaybackItem is null)
@@ -269,20 +252,47 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         _playerSettings.ShowRemainingTime = value;
     }
 
+    private void PlayQueueOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        NextCommand.NotifyCanExecuteChanged();
+        PreviousCommand.NotifyCanExecuteChanged();
+    }
+
     private void PlayQueueOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
         {
             case nameof(PlayQueueContext.CurrentItem):
+                _lastVideoTrackIndex = 0;
                 HasActiveItem = PlayQueue.CurrentItem is not null;
+                OnPropertyChanged(nameof(CanToggleAudioOnly));
+                ToggleAudioOnlyCommand.NotifyCanExecuteChanged();
+                NextCommand.NotifyCanExecuteChanged();
+                PreviousCommand.NotifyCanExecuteChanged();
                 Messenger.Send(new ResetPlaybackSessionMessage());
+                break;
+            case nameof(PlayQueueContext.CurrentIndex):
+            case nameof(PlayQueueContext.RepeatMode):
+            case nameof(PlayQueueContext.ShuffleMode):
+                NextCommand.NotifyCanExecuteChanged();
+                PreviousCommand.NotifyCanExecuteChanged();
                 break;
         }
     }
 
     private void OnNaturalVideoSizeChanged(IMediaPlayer sender, object? args)
     {
-        _dispatcherQueue.TryEnqueue(() => HasVideo = MediaPlayer?.NaturalVideoHeight > 0);
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            if (IsAudioOnly && MediaPlayer?.NaturalVideoHeight > 0)
+            {
+                ApplyAudioOnlyTrackState(true);
+            }
+
+            HasVideo = !IsAudioOnly && MediaPlayer?.NaturalVideoHeight > 0;
+            OnPropertyChanged(nameof(CanToggleAudioOnly));
+            ToggleAudioOnlyCommand.NotifyCanExecuteChanged();
+        });
     }
 
     private void OnPlaybackStateChanged(IMediaPlayer sender, object? args)
@@ -339,6 +349,7 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         _coordinator.ResetCurrentItem();
         _dispatcherQueue.TryEnqueue(() =>
         {
+            if (MediaPlayer is null) return;
             MediaPlayer.Play();
             MediaPlayer.Position = pos;
         });
@@ -375,7 +386,7 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         {
             await _windowService.TryExitCompactLayoutAsync();
         }
-        else if (MediaPlayer?.NaturalVideoHeight > 0)
+        else if (!IsAudioOnly && MediaPlayer?.NaturalVideoHeight > 0)
         {
             double aspectRatio = MediaPlayer.NaturalVideoWidth / (double)MediaPlayer.NaturalVideoHeight;
             await _windowService.TryEnterCompactLayoutAsync(new Size(240 * aspectRatio, 240));
@@ -413,10 +424,6 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         }
     }
 
-    /// <summary>
-    /// Saves a snapshot of the current video frame to the configured folder, falling back
-    /// to the Pictures library when the folder is not set or cannot be accessed.
-    /// </summary>
     [RelayCommand(CanExecute = nameof(HasVideo))]
     private async Task SaveSnapshotAsync()
     {
@@ -437,6 +444,66 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         catch (Exception e)
         {
             Messenger.Send(new NotificationMessage(NotificationLevel.Error, NotificationKind.FrameSaveFailed, message: e.Message));
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanToggleAudioOnly))]
+    private void ToggleAudioOnly()
+    {
+        IsAudioOnly = !IsAudioOnly;
+    }
+
+    partial void OnIsAudioOnlyChanged(bool value)
+    {
+        _playerSettings.IsAudioOnly = value;
+
+        // Clear buffered items so upcoming queue items are created with or without :no-video.
+        foreach (var buffered in _bufferManager.BufferedItems)
+        {
+            if (buffered != PlayQueue.CurrentItem)
+            {
+                _bufferManager.CleanPlaybackItem(buffered);
+            }
+        }
+
+        if (!value && MediaPlayer?.PlaybackItem is { VideoTracks.Count: 0 } && PlayQueue.CurrentItem is not null)
+        {
+            // Current item was opened with :no-video; reload it at the current position to restore video tracks.
+            ResetMediaPlayback();
+        }
+        else
+        {
+            ApplyAudioOnlyTrackState(value);
+        }
+
+        HasVideo = !value && MediaPlayer?.NaturalVideoHeight > 0;
+        Messenger.Send(new AudioOnlyModeChangedMessage(value));
+        Messenger.Send(new PlayerOsdUpdateMessage(default, value: value ? "Audio only: On" : "Audio only: Off").ShowMessage());
+    }
+
+    private void ApplyAudioOnlyTrackState(bool audioOnly)
+    {
+        if (MediaPlayer?.PlaybackItem is not { VideoTracks.Count: > 0 } item)
+            return;
+
+        if (audioOnly)
+        {
+            if (item.VideoTracks.SelectedIndex >= 0)
+            {
+                _lastVideoTrackIndex = item.VideoTracks.SelectedIndex;
+            }
+
+            if (item.VideoTracks.SelectedIndex != -1)
+            {
+                item.VideoTracks.SelectedIndex = -1;
+            }
+        }
+        else if (item.VideoTracks.SelectedIndex == -1)
+        {
+            int targetIndex = _lastVideoTrackIndex >= 0 && _lastVideoTrackIndex < item.VideoTracks.Count
+                ? _lastVideoTrackIndex
+                : 0;
+            item.VideoTracks.SelectedIndex = targetIndex;
         }
     }
 
@@ -462,4 +529,3 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
         }
     }
 }
-

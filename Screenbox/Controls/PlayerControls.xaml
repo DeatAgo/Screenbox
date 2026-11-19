@@ -258,6 +258,19 @@
                         GroupName="AspectRatioGroup"
                         Text="{x:Bind strings:Resources.Custom}" />
                 </MenuFlyoutSubItem>
+
+                <ToggleMenuFlyoutItem
+                    Command="{x:Bind ViewModel.ToggleAudioOnlyCommand}"
+                    Icon="{ui:FontIcon Glyph=&#xE7F6;}"
+                    IsChecked="{x:Bind ViewModel.IsAudioOnly, Mode=OneWay}"
+                    IsEnabled="{x:Bind ViewModel.CanToggleAudioOnly, Mode=OneWay}"
+                    Text="Audio only"
+                    Visibility="{x:Bind ViewModel.CanToggleAudioOnly, Mode=OneWay}">
+                    <ToggleMenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="A" Modifiers="Control,Shift" />
+                    </ToggleMenuFlyoutItem.KeyboardAccelerators>
+                </ToggleMenuFlyoutItem>
+
                 <!--<MenuFlyoutSubItem
                     Icon="{ui:FontIcon Glyph=&#xE714;}"
                     IsEnabled="{x:Bind ViewModel.HasVideo, Mode=OneWay}"
@@ -746,4 +759,3 @@
         </VisualStateManager.VisualStateGroups>
     </Grid>
 </UserControl>
-

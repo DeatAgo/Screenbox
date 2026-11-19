@@ -4,11 +4,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:behaviors="using:Screenbox.Behaviors"
     xmlns:commands="using:Screenbox.Commands"
-    xmlns:contract13NotPresent="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractNotPresent(Windows.Foundation.UniversalApiContract,13)"
-    xmlns:converters="using:Screenbox.Converters"
+    xmlns:controls="using:Screenbox.Controls"
+    xmlns:ctAnimations="using:CommunityToolkit.WinUI.Animations"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:flyouts="using:Screenbox.Flyouts"
-    xmlns:helpers="using:Screenbox.Helpers"
     xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
@@ -20,8 +19,11 @@
     <Page.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Styles/CommandBar.xaml" />
                 <templates:GridViewItemTemplates />
             </ResourceDictionary.MergedDictionaries>
+
+            <commands:SelectDeselectAllCommand x:Key="SelectDeselectAllCommand" />
 
             <flyouts:MediaMenuFlyout
                 x:Key="ItemFlyout"
@@ -29,7 +31,8 @@
                 ContextItem="{x:Bind ViewModel.ContextMedia, Mode=OneWay}"
                 IsAdvancedModeEnabled="{x:Bind Common.IsAdvancedModeEnabled}"
                 PlayCommand="{x:Bind ViewModel.PlayCommand}"
-                PlayNextCommand="{x:Bind Common.PlayNextCommand}" />
+                PlayNextCommand="{x:Bind Common.PlayNextCommand}"
+                SelectCommand="{x:Bind ViewModel.Selection.SelectItemCommand}" />
         </ResourceDictionary>
     </Page.Resources>
 
@@ -38,12 +41,38 @@
     </interactivity:Interaction.Behaviors>
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <controls:SelectionBarControl
+            x:Name="SelectionBar"
+            Grid.Row="0"
+            Margin="{StaticResource ContentPagePadding}"
+            ctAnimations:Implicit.HideAnimations="{StaticResource SelectionBarExitImplicitAnimation}"
+            ctAnimations:Implicit.ShowAnimations="{StaticResource SelectionBarEntranceImplicitAnimation}"
+            AddToQueueButtonCommand="{x:Bind ViewModel.AddSelectedToQueueCommand}"
+            CheckBoxCommand="{StaticResource SelectDeselectAllCommand}"
+            CheckBoxCommandParameter="{x:Bind VideosGridView}"
+            CheckBoxIsChecked="{x:Bind ViewModel.Selection.IsAllSelected, Mode=OneWay}"
+            CheckBoxText="{x:Bind strings:Resources.ItemsSelected(ViewModel.Selection.SelectedCount), Mode=OneWay}"
+            CloseButtonCommand="{x:Bind ViewModel.Selection.DisableSelectionModeCommand}"
+            IsRemoveButtonVisible="False"
+            PlayButtonCommand="{x:Bind ViewModel.PlaySelectedCommand}"
+            PlayNextButtonCommand="{x:Bind ViewModel.PlaySelectedNextCommand}"
+            Selection="{x:Bind ViewModel.Selection}"
+            Visibility="Collapsed" />
+
         <muxc:ProgressBar
+            Grid.Row="1"
             VerticalAlignment="Top"
             IsIndeterminate="True"
             Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+
         <GridView
             x:Name="VideosGridView"
+            Grid.Row="1"
             Margin="{StaticResource TopLargeMargin}"
             Padding="{StaticResource GridViewContentPagePadding}"
             ui:ListViewExtensions.Command="{x:Bind ViewModel.PlayCommand}"
@@ -51,6 +80,7 @@
             ItemContainerStyle="{StaticResource GridViewItemMediaCardStyle}"
             ItemTemplate="{StaticResource WideMediaGridViewItemTemplate}"
             ItemsSource="{x:Bind ViewModel.Videos}"
+            KeyboardAcceleratorPlacementMode="Hidden"
             SelectionMode="None">
             <GridView.Resources>
                 <commands:BindableCommand x:Key="MediaListViewItemPlayCommand" Command="{x:Bind ViewModel.PlayCommand}" />
@@ -58,14 +88,34 @@
             <GridView.Footer>
                 <Border Height="{x:Bind Common.FooterBottomPaddingHeight, Mode=OneWay}" />
             </GridView.Footer>
+            <GridView.KeyboardAccelerators>
+                <KeyboardAccelerator
+                    Key="A"
+                    Invoked="SelectDeselectAllKeyboardAccelerator_OnInvoked"
+                    Modifiers="Control" />
+            </GridView.KeyboardAccelerators>
             <interactivity:Interaction.Behaviors>
                 <behaviors:ListViewContextBehavior ContextItem="{x:Bind ViewModel.ContextMedia, Mode=TwoWay}" Flyout="{StaticResource ItemFlyout}" />
+                <behaviors:ListViewSelectionBehavior Selection="{x:Bind ViewModel.Selection}" />
                 <behaviors:BringIntoViewWithOffsetBehavior FromBottom="{x:Bind Common.FooterBottomPaddingHeight, Mode=OneWay}" />
                 <behaviors:ThumbnailGridViewBehavior />
             </interactivity:Interaction.Behaviors>
         </GridView>
 
         <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="SelectionModes">
+                <VisualState x:Name="Multiple">
+                    <VisualState.StateTriggers>
+                        <StateTrigger IsActive="{x:Bind ViewModel.Selection.IsSelectionModeActive, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="SelectionBar.Visibility" Value="Visible" />
+                        <Setter Target="VideosGridView.SelectionMode" Value="Multiple" />
+                        <Setter Target="VideosGridView.IsItemClickEnabled" Value="False" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
             <VisualStateGroup x:Name="NavigationViewStates">
                 <VisualState x:Name="Expanded" />
                 <VisualState x:Name="Compact" />
@@ -74,6 +124,8 @@
                         <ui:IsEqualStateTrigger Value="{x:Bind Common.NavigationViewDisplayMode, Mode=OneWay}" To="{StaticResource MinimalNavigationViewDisplayMode}" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
+                        <Setter Target="SelectionBar.Margin" Value="{StaticResource ContentPageMinimalPadding}" />
+                        <Setter Target="SelectionBar.DefaultLabelPosition" Value="Collapsed" />
                         <Setter Target="VideosGridView.Padding" Value="{StaticResource GridViewContentPageMinimalPadding}" />
                     </VisualState.Setters>
                 </VisualState>
@@ -81,4 +133,3 @@
         </VisualStateManager.VisualStateGroups>
     </Grid>
 </Page>
-

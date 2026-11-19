@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using Screenbox.Core.Enums;
 using Screenbox.Core.Models;
 
@@ -20,12 +21,17 @@ public sealed partial class DatabaseService
         using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT OR REPLACE INTO playlists (id, display_name, last_updated)
-                VALUES (@id, @name, @updated);
+                INSERT INTO playlists (id, display_name, last_updated, custom_thumbnail)
+                VALUES (@id, @name, @updated, @customThumb)
+                ON CONFLICT(id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    last_updated = excluded.last_updated,
+                    custom_thumbnail = excluded.custom_thumbnail;
                 """;
             cmd.Parameters.AddWithValue("@id", playlist.Id);
             cmd.Parameters.AddWithValue("@name", playlist.DisplayName);
             cmd.Parameters.AddWithValue("@updated", playlist.LastUpdated.UtcTicks);
+            cmd.Parameters.AddWithValue("@customThumb", (object?)playlist.CustomThumbnailPath ?? DBNull.Value);
             cmd.ExecuteNonQuery();
         }
 
@@ -71,7 +77,7 @@ public sealed partial class DatabaseService
 
         using (var cmd = connection.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, display_name, last_updated FROM playlists WHERE id = @id;";
+            cmd.CommandText = "SELECT id, display_name, last_updated, custom_thumbnail FROM playlists WHERE id = @id;";
             cmd.Parameters.AddWithValue("@id", id);
             using var reader = cmd.ExecuteReader();
             if (reader.Read())
@@ -81,6 +87,7 @@ public sealed partial class DatabaseService
                     Id = reader.GetString(0),
                     DisplayName = reader.GetString(1),
                     LastUpdated = new DateTimeOffset(reader.GetInt64(2), TimeSpan.Zero),
+                    CustomThumbnailPath = reader.IsDBNull(3) ? null : reader.GetString(3),
                 };
             }
         }
@@ -103,7 +110,7 @@ public sealed partial class DatabaseService
         var playlists = new List<PlaylistRecordDto>();
         using (var cmd = connection.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, display_name, last_updated FROM playlists ORDER BY last_updated DESC;";
+            cmd.CommandText = "SELECT id, display_name, last_updated, custom_thumbnail FROM playlists ORDER BY last_updated DESC;";
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
@@ -112,6 +119,7 @@ public sealed partial class DatabaseService
                     Id = reader.GetString(0),
                     DisplayName = reader.GetString(1),
                     LastUpdated = new DateTimeOffset(reader.GetInt64(2), TimeSpan.Zero),
+                    CustomThumbnailPath = reader.IsDBNull(3) ? null : reader.GetString(3),
                 });
             }
         }
@@ -129,10 +137,44 @@ public sealed partial class DatabaseService
     {
         await EnsureInitializedAsync();
         using var connection = CreateConnection();
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "DELETE FROM playlists WHERE id = @id;";
-        cmd.Parameters.AddWithValue("@id", id);
-        cmd.ExecuteNonQuery();
+
+        string? customThumbPath = null;
+        using (var selectCmd = connection.CreateCommand())
+        {
+            selectCmd.CommandText = "SELECT custom_thumbnail FROM playlists WHERE id = @id;";
+            selectCmd.Parameters.AddWithValue("@id", id);
+            if (selectCmd.ExecuteScalar() is string path && !string.IsNullOrWhiteSpace(path))
+            {
+                customThumbPath = path;
+            }
+        }
+
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM playlists WHERE id = @id;";
+            cmd.Parameters.AddWithValue("@id", id);
+            cmd.ExecuteNonQuery();
+        }
+
+        if (!string.IsNullOrEmpty(customThumbPath))
+        {
+            try
+            {
+                string fullLocalRoot = Path.GetFullPath(DbFolderPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                string fullThumbPath = Path.GetFullPath(customThumbPath);
+
+                if (fullThumbPath.StartsWith(fullLocalRoot, StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(fullThumbPath))
+                {
+                    File.Delete(fullThumbPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete custom playlist thumbnail '{Path}'.", customThumbPath);
+            }
+        }
     }
 
     private static List<RawMediaRecordDto> ReadPlaylistItems(SqliteConnection connection, string playlistId)

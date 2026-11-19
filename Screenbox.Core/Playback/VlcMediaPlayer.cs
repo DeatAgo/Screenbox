@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using LibVLCSharp.Shared;
+using Screenbox.Core.Contexts;
 using Screenbox.Core.Events;
 using Windows.Devices.Enumeration;
 using Windows.Foundation;
@@ -13,7 +15,7 @@ using MediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 
 namespace Screenbox.Core.Playback;
 
-public sealed class VlcMediaPlayer : IMediaPlayer
+public sealed partial class VlcMediaPlayer : IMediaPlayer
 {
     public event TypedEventHandler<IMediaPlayer, EventArgs>? MediaEnded;
     public event TypedEventHandler<IMediaPlayer, EventArgs>? MediaFailed;
@@ -267,8 +269,27 @@ public sealed class VlcMediaPlayer : IMediaPlayer
 
     internal LibVLC LibVlc { get; }
 
+    private static readonly Dictionary<string, string[]> LanguageAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["en"] = ["en", "eng", "english"],
+        ["ja"] = ["ja", "jpn", "japanese", "日本語"],
+        ["zh"] = ["zh", "chi", "zho", "chinese", "中文", "mandarin", "cantonese"],
+        ["ko"] = ["ko", "kor", "korean", "한국어"],
+        ["es"] = ["es", "spa", "spanish", "español"],
+        ["fr"] = ["fr", "fre", "fra", "french", "français"],
+        ["de"] = ["de", "ger", "deu", "german", "deutsch"],
+        ["pt"] = ["pt", "por", "portuguese", "português"],
+        ["ru"] = ["ru", "rus", "russian", "русский"],
+        ["ar"] = ["ar", "ara", "arabic", "العربية"],
+        ["hi"] = ["hi", "hin", "hindi", "हिन्दी"],
+        ["vi"] = ["vi", "vie", "vietnamese", "tiếng việt"],
+        ["th"] = ["th", "tha", "thai", "ไทย"],
+        ["id"] = ["id", "ind", "indonesian", "bahasa indonesia"]
+    };
+
     private const long MaxSupportedMilliseconds = long.MaxValue / TimeSpan.TicksPerMillisecond;
     private readonly Rect _defaultSourceRect;
+    private readonly PlayerSettingsContext? _playerSettings;
     private ChapterCue? _chapter;
     private Rect _normalizedSourceRect;
     private bool _readyToPlay;
@@ -278,9 +299,10 @@ public sealed class VlcMediaPlayer : IMediaPlayer
     private MediaPlaybackState _playbackState;
     private VlcPlaybackItem? _playbackItem;
 
-    public VlcMediaPlayer(LibVLC libVlc)
+    public VlcMediaPlayer(LibVLC libVlc, PlayerSettingsContext? playerSettings = null)
     {
         LibVlc = libVlc;
+        _playerSettings = playerSettings;
         VlcPlayer = new MediaPlayer(libVlc);
         _defaultSourceRect = new Rect(0, 0, 1, 1);
         _normalizedSourceRect = _defaultSourceRect;
@@ -392,6 +414,8 @@ public sealed class VlcMediaPlayer : IMediaPlayer
         if (!_updateMediaProperties) return;
         _updateMediaProperties = false;
 
+        ApplyPreferredSubtitleTrack();
+
         if (_playbackItem?.Chapters.Count == 0)
         {
             _playbackItem.Chapters.Load(this);
@@ -406,6 +430,72 @@ public sealed class VlcMediaPlayer : IMediaPlayer
             NaturalVideoHeight = py;
             NaturalVideoSizeChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void ApplyPreferredSubtitleTrack()
+    {
+        if (_playerSettings == null || _playbackItem == null) return;
+
+        string mode = _playerSettings.SubtitlePreferredLanguageMode;
+        if (string.IsNullOrWhiteSpace(mode) || string.Equals(mode, "default", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (string.Equals(mode, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            VlcPlayer.SetSpu(-1);
+            _playbackItem.SubtitleTracks.SelectedIndex = -1;
+            return;
+        }
+
+        string target = string.Equals(mode, "custom", StringComparison.OrdinalIgnoreCase)
+            ? _playerSettings.SubtitlePreferredLanguageCode.Trim()
+            : mode;
+
+        if (string.IsNullOrEmpty(target))
+            return;
+
+        var tracks = VlcPlayer.SpuDescription;
+        if (tracks == null || tracks.Length == 0)
+            return;
+
+        string[] requestedCodes = target.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (string code in requestedCodes)
+        {
+            string[] tokens = LanguageAliases.TryGetValue(code, out var aliases) ? aliases : [code];
+            foreach (var track in tracks)
+            {
+                if (track.Id <= 0 || string.IsNullOrWhiteSpace(track.Name))
+                    continue;
+
+                foreach (string token in tokens)
+                {
+                    if (IsLanguageTokenMatch(track.Name, token))
+                    {
+                        VlcPlayer.SetSpu(track.Id);
+                        _playbackItem.SubtitleTracks.SelectVlcSpu(track.Id);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    private static bool IsLanguageTokenMatch(string trackName, string token)
+    {
+        int index = 0;
+        while ((index = trackName.IndexOf(token, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            bool startBoundary = index == 0 || !char.IsLetter(trackName[index - 1]);
+            int end = index + token.Length;
+            bool endBoundary = end == trackName.Length || !char.IsLetter(trackName[end]);
+
+            if (startBoundary && endBoundary)
+                return true;
+
+            index += token.Length;
+        }
+
+        return false;
     }
 
     private void VlcPlayer_EndReached(object? sender, EventArgs e)

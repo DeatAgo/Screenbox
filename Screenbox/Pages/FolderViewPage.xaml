@@ -4,9 +4,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:behaviors="using:Screenbox.Behaviors"
     xmlns:commands="using:Screenbox.Commands"
-    xmlns:contract13NotPresent="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractNotPresent(Windows.Foundation.UniversalApiContract,13)"
     xmlns:controls="using:Screenbox.Controls"
     xmlns:converters="using:Screenbox.Converters"
+    xmlns:ctAnimations="using:CommunityToolkit.WinUI.Animations"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:flyouts="using:Screenbox.Flyouts"
     xmlns:helpers="using:Screenbox.Helpers"
@@ -14,7 +14,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:sbuc="using:Screenbox.UI.Controls"
-    xmlns:storage="using:Windows.Storage"
+    xmlns:selectors="using:Screenbox.Selectors"
     xmlns:strings="using:Screenbox.Strings"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:viewModels="using:Screenbox.Core.ViewModels"
@@ -22,18 +22,65 @@
 
     <Page.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Styles/CommandBar.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style
+                x:Key="FolderGridViewItemMediaCardStyle"
+                BasedOn="{StaticResource GridViewItemMediaCardStyle}"
+                TargetType="GridViewItem">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="GridViewItem">
+                            <ListViewItemPresenter
+                                x:Name="Root"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                CheckBoxBrush="{ThemeResource GridViewItemCheckBoxBrush}"
+                                CheckBrush="{ThemeResource GridViewItemCheckBrush}"
+                                CheckMode="{ThemeResource GridViewItemCheckMode}"
+                                ContentMargin="{TemplateBinding Padding}"
+                                ContentTransitions="{TemplateBinding ContentTransitions}"
+                                Control.IsTemplateFocusTarget="True"
+                                DisabledOpacity="{ThemeResource ListViewItemDisabledThemeOpacity}"
+                                FocusBorderBrush="{ThemeResource GridViewItemFocusBorderBrush}"
+                                FocusSecondaryBorderBrush="{ThemeResource GridViewItemFocusSecondaryBorderBrush}"
+                                FocusVisualMargin="{TemplateBinding FocusVisualMargin}"
+                                PlaceholderBackground="{ThemeResource GridViewItemPlaceholderBackground}"
+                                PointerOverBackground="{ThemeResource GridViewItemBackgroundPointerOver}"
+                                PointerOverForeground="{ThemeResource GridViewItemForegroundPointerOver}"
+                                PressedBackground="{ThemeResource GridViewItemBackgroundPressed}"
+                                SelectedBackground="{ThemeResource GridViewItemBackgroundSelected}"
+                                SelectedDisabledBackground="{ThemeResource GridViewItemBackgroundSelectedDisabled}"
+                                SelectedForeground="{ThemeResource GridViewItemForegroundSelected}"
+                                SelectedPointerOverBackground="{ThemeResource GridViewItemBackgroundSelectedPointerOver}"
+                                SelectedPressedBackground="{ThemeResource GridViewItemBackgroundSelectedPressed}"
+                                SelectionCheckMarkVisualEnabled="False" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <selectors:FolderViewItemContainerStyleSelector
+                x:Key="FolderViewItemStyleSelector"
+                FolderItemStyle="{StaticResource FolderGridViewItemMediaCardStyle}"
+                VideoItemStyle="{StaticResource GridViewItemMediaCardStyle}" />
+
             <flyouts:MediaMenuFlyout
                 x:Key="ItemFlyout"
                 AddToQueueCommand="{x:Bind ViewModel.AddToQueueCommand}"
                 ContextItem="{x:Bind ViewModel.ContextItem, Mode=OneWay}"
                 IsAdvancedModeEnabled="{x:Bind Common.IsAdvancedModeEnabled}"
                 PlayCommand="{x:Bind ViewModel.PlayCommand}"
-                PlayNextCommand="{x:Bind ViewModel.PlayNextCommand}" />
+                PlayNextCommand="{x:Bind ViewModel.PlayNextCommand}"
+                SelectCommand="{x:Bind ViewModel.Selection.SelectItemCommand}" />
         </ResourceDictionary>
     </Page.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -62,23 +109,43 @@
             ItemsSource="{x:Bind ViewModel.Breadcrumbs}"
             KeyTipPlacementMode="Right" />
 
-        <muxc:ProgressBar
+        <controls:SelectionBarControl
+            x:Name="SelectionBar"
             Grid.Row="2"
+            Margin="{StaticResource ContentPagePadding}"
+            ctAnimations:Implicit.HideAnimations="{StaticResource SelectionBarExitImplicitAnimation}"
+            ctAnimations:Implicit.ShowAnimations="{StaticResource SelectionBarEntranceImplicitAnimation}"
+            AddToQueueButtonCommand="{x:Bind ViewModel.AddSelectedToQueueCommand}"
+            CheckBoxCommand="{x:Bind ViewModel.SelectAllOrNoneVideosCommand}"
+            CheckBoxIsChecked="{x:Bind ViewModel.AreAllVideosSelected, Mode=OneWay}"
+            CheckBoxText="{x:Bind strings:Resources.ItemsSelected(ViewModel.Selection.SelectedCount), Mode=OneWay}"
+            CloseButtonCommand="{x:Bind ViewModel.Selection.DisableSelectionModeCommand}"
+            IsRemoveButtonVisible="False"
+            PlayButtonCommand="{x:Bind ViewModel.PlaySelectedCommand}"
+            PlayNextButtonCommand="{x:Bind ViewModel.PlaySelectedNextCommand}"
+            Selection="{x:Bind ViewModel.Selection}"
+            Visibility="Collapsed" />
+
+        <muxc:ProgressBar
+            Grid.Row="3"
             Margin="0,4,0,0"
             VerticalAlignment="Top"
             IsIndeterminate="True"
             Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
         <GridView
             x:Name="FolderView"
-            Grid.Row="2"
+            Grid.Row="3"
             Margin="{StaticResource TopLargeMargin}"
             Padding="{StaticResource GridViewContentPagePadding}"
             ui:ListViewExtensions.Command="{x:Bind ViewModel.ClickCommand}"
             ui:ScrollViewerExtensions.VerticalScrollBarMargin="{x:Bind Common.ScrollBarMargin, Mode=OneWay}"
+            ContainerContentChanging="FolderView_OnContainerContentChanging"
             IsItemClickEnabled="True"
-            ItemContainerStyle="{StaticResource GridViewItemMediaCardStyle}"
+            ItemContainerStyleSelector="{StaticResource FolderViewItemStyleSelector}"
             ItemsSource="{x:Bind ViewModel.Items}"
+            KeyboardAcceleratorPlacementMode="Hidden"
             Loaded="FolderView_OnLoaded"
+            SelectionChanged="FolderView_OnSelectionChanged"
             SelectionMode="None">
             <GridView.Resources>
                 <commands:BindableCommand x:Key="MediaListViewItemPlayCommand" Command="{x:Bind ViewModel.PlayCommand}" />
@@ -105,21 +172,27 @@
             <GridView.Footer>
                 <Border Height="{x:Bind Common.FooterBottomPaddingHeight, Mode=OneWay}" />
             </GridView.Footer>
+            <GridView.KeyboardAccelerators>
+                <KeyboardAccelerator
+                    Key="A"
+                    Invoked="SelectDeselectAllKeyboardAccelerator_OnInvoked"
+                    Modifiers="Control" />
+            </GridView.KeyboardAccelerators>
             <interactivity:Interaction.Behaviors>
                 <behaviors:AutoFocusBehavior />
                 <behaviors:ListViewContextBehavior
                     ContextItem="{x:Bind ViewModel.ContextItem, Mode=TwoWay}"
                     ContextRequested="FolderView_OnItemContextRequested"
                     Flyout="{StaticResource ItemFlyout}" />
+                <behaviors:ListViewSelectionBehavior Selection="{x:Bind ViewModel.Selection}" />
                 <behaviors:BringIntoViewWithOffsetBehavior FromBottom="{x:Bind Common.FooterBottomPaddingHeight, Mode=OneWay}" />
                 <behaviors:ThumbnailGridViewBehavior />
             </interactivity:Interaction.Behaviors>
         </GridView>
 
-        <!--  Empty content  -->
         <sbuc:ContentUnavailableView
             x:Name="NoContentPanel"
-            Grid.Row="2"
+            Grid.Row="3"
             Margin="{StaticResource TopLargeMargin}"
             Padding="{StaticResource ContentPagePadding}"
             VerticalAlignment="Top"
@@ -131,6 +204,19 @@
         </interactivity:Interaction.Behaviors>
 
         <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="SelectionModes">
+                <VisualState x:Name="Multiple">
+                    <VisualState.StateTriggers>
+                        <StateTrigger IsActive="{x:Bind ViewModel.Selection.IsSelectionModeActive, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="SelectionBar.Visibility" Value="Visible" />
+                        <Setter Target="FolderView.SelectionMode" Value="Multiple" />
+                        <Setter Target="FolderView.IsItemClickEnabled" Value="False" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
             <VisualStateGroup x:Name="NavigationViewStates">
                 <VisualState x:Name="Expanded" />
                 <VisualState x:Name="Compact" />
@@ -141,6 +227,8 @@
                     <VisualState.Setters>
                         <Setter Target="TitleText.Padding" Value="{StaticResource ContentPageMinimalPadding}" />
                         <Setter Target="BreadcrumbBar.Margin" Value="{StaticResource ContentPageMinimalPadding}" />
+                        <Setter Target="SelectionBar.Margin" Value="{StaticResource ContentPageMinimalPadding}" />
+                        <Setter Target="SelectionBar.DefaultLabelPosition" Value="Collapsed" />
                         <Setter Target="FolderView.Padding" Value="{StaticResource GridViewContentPageMinimalPadding}" />
                         <Setter Target="NoContentPanel.Padding" Value="{StaticResource ContentPageMinimalPadding}" />
                     </VisualState.Setters>
@@ -149,4 +237,3 @@
         </VisualStateManager.VisualStateGroups>
     </Grid>
 </Page>
-

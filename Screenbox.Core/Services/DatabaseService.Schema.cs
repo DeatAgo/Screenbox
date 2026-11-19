@@ -115,7 +115,7 @@ public sealed partial class DatabaseService
     private static void EnsurePlaylistsTable(SqliteConnection connection)
     {
         HashSet<string> actualColumns = ReadTableColumns(connection, "playlists");
-        string[] expectedColumns = ["id", "display_name", "last_updated"];
+        string[] expectedColumns = ["id", "display_name", "last_updated", "custom_thumbnail"];
         if (actualColumns.Count is 0)
         {
             ExecuteNonQuery(connection, CreatePlaylistsSql);
@@ -124,6 +124,12 @@ public sealed partial class DatabaseService
 
         if (!HasSchemaDrift(actualColumns, expectedColumns))
         {
+            return;
+        }
+
+        if (!HasSchemaDrift(actualColumns, "id", "display_name", "last_updated"))
+        {
+            ExecuteNonQuery(connection, "ALTER TABLE playlists ADD COLUMN custom_thumbnail TEXT;");
             return;
         }
 
@@ -369,9 +375,10 @@ public sealed partial class DatabaseService
 
     private const string CreatePlaylistsSql = """
         CREATE TABLE IF NOT EXISTS playlists (
-            id           TEXT PRIMARY KEY,
-            display_name TEXT    NOT NULL,
-            last_updated INTEGER NOT NULL
+            id               TEXT PRIMARY KEY,
+            display_name     TEXT    NOT NULL,
+            last_updated     INTEGER NOT NULL,
+            custom_thumbnail TEXT
         );
         """;
 

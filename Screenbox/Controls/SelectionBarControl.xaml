@@ -50,13 +50,15 @@
             <CommandBar.Content>
                 <StackPanel Margin="10,0,4,0" Orientation="Horizontal">
                     <CheckBox
+                        x:Name="SelectAllCheckBox"
                         MinWidth="60"
                         AutomationProperties.HelpText="{x:Bind CheckBoxText, Mode=OneWay}"
                         AutomationProperties.Name="{x:Bind strings:Resources.SelectAll}"
+                        Click="SelectAllCheckBox_OnClick"
                         Command="{x:Bind CheckBoxCommand}"
                         CommandParameter="{x:Bind CheckBoxCommandParameter}"
                         Content="{x:Bind CheckBoxText, Mode=OneWay}"
-                        IsChecked="{x:Bind CheckBoxIsChecked, Mode=TwoWay}"
+                        IsChecked="{x:Bind CheckBoxIsChecked, Mode=OneWay}"
                         IsThreeState="True"
                         ToolTipService.ToolTip="{x:Bind CheckBoxIsChecked, Converter={StaticResource CheckBoxToSelectionToolTipConverter}, Mode=OneWay}" />
                     <TextBlock Padding="4,5,0,0" Text="•" />

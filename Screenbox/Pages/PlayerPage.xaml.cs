@@ -2,13 +2,17 @@ using System;
 using System.ComponentModel;
 using System.Globalization;
 using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Diagnostics;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using Screenbox.Controls;
 using Screenbox.Converters;
 using Screenbox.Core.Enums;
+using Screenbox.Core.Messages;
 using Screenbox.Core.ViewModels;
+using Screenbox.Dialogs;
 using Screenbox.Helpers;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
@@ -22,14 +26,9 @@ using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Navigation;
 
-// The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
-
 namespace Screenbox.Pages;
 
-/// <summary>
-/// An empty page that can be used on its own or navigated to within a Frame.
-/// </summary>
-public sealed partial class PlayerPage : Page
+public sealed partial class PlayerPage : Page, IRecipient<PropertiesDockMessage>
 {
     internal PlayerPageViewModel ViewModel => (PlayerPageViewModel)DataContext;
 
@@ -37,7 +36,13 @@ public sealed partial class PlayerPage : Page
 
     private readonly DispatcherQueueTimer _delayFlyoutOpenTimer;
     private CancellationTokenSource? _animationCancellationTokenSource;
+    private CancellationTokenSource? _emptyArtDelayCts;
+    private MediaViewModel? _trackedMedia;
+    private MediaViewModel? _dockedPropertiesMedia;
+    private bool _isDockedSidebarOpen;
     private bool _startup;
+    private bool _isRefreshingDockedProperties;
+    private bool _isPointerOverPropertiesSidebar;
 
     public PlayerPage()
     {
@@ -49,17 +54,14 @@ public sealed partial class PlayerPage : Page
         UpdatePreviewType();
 
         ViewModel.PropertyChanged += ViewModelOnPropertyChanged;
-        AlbumArtImage.RegisterPropertyChangedCallback(ImageBrush.ImageSourceProperty, AlbumArtImageOnSourceChanged);
+        UpdateTrackedMedia();
         LayoutRoot.ActualThemeChanged += OnActualThemeChanged;
+        WeakReferenceMessenger.Default.Register(this);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         UpdateBackgroundAcrylicOpacity(ActualTheme);
-
-        // DO NOT SET CONTENT VISUAL STATE HERE
-        // It will cause element theme to not propagate correctly
-        // VisualStateManager.GoToState(this, "Video", false);
 
         if (e.Parameter is true)
         {
@@ -100,8 +102,246 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private void AlbumArtImageOnSourceChanged(DependencyObject sender, DependencyProperty dp)
+    public void Receive(PropertiesDockMessage message)
     {
+        if (!message.IsOpen || message.Mode == PropertiesDockMode.Floating)
+        {
+            _isDockedSidebarOpen = false;
+            LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+            RightPropertiesSidebar.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (ViewModel.Media == null)
+        {
+            if (message.Media != null)
+            {
+                var dialog = new PropertiesDialog { Media = message.Media };
+                _ = dialog.ShowFloatingAsync();
+            }
+            return;
+        }
+
+        _dockedPropertiesMedia = message.Media ?? ViewModel.Media;
+        _isDockedSidebarOpen = true;
+
+        if (ViewModel.ViewMode == WindowViewMode.Compact)
+        {
+            LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+            RightPropertiesSidebar.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (ViewModel.PlayerVisibility != PlayerVisibilityState.Visible)
+        {
+            ViewModel.PlayerVisibility = PlayerVisibilityState.Visible;
+        }
+
+        ApplyDockedSidebarState(message.Mode);
+    }
+
+    private void RestoreDockedSidebarIfNeeded()
+    {
+        if (_isDockedSidebarOpen &&
+            ViewModel.Media != null &&
+            ViewModel.PlayerVisibility == PlayerVisibilityState.Visible &&
+            ViewModel.ViewMode != WindowViewMode.Compact &&
+            PropertiesDialog.PreferredDockMode is PropertiesDockMode.Left or PropertiesDockMode.Right)
+        {
+            ApplyDockedSidebarState(PropertiesDialog.PreferredDockMode);
+        }
+    }
+
+    private void ApplyDockedSidebarState(PropertiesDockMode mode)
+    {
+        if (mode == PropertiesDockMode.Left)
+        {
+            RightPropertiesSidebar.Visibility = Visibility.Collapsed;
+            RightPropertiesView.Media = null;
+            LeftPropertiesView.Media = null;
+            LeftPropertiesView.Media = _dockedPropertiesMedia;
+            LeftPropertiesSidebar.Visibility = Visibility.Visible;
+        }
+        else if (mode == PropertiesDockMode.Right)
+        {
+            LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+            LeftPropertiesView.Media = null;
+            RightPropertiesView.Media = null;
+            RightPropertiesView.Media = _dockedPropertiesMedia;
+            RightPropertiesSidebar.Visibility = Visibility.Visible;
+        }
+    }
+
+    private async void RefreshDockedPropertiesMedia(MediaViewModel? media)
+    {
+        if (media == null || !_isDockedSidebarOpen || _isRefreshingDockedProperties) return;
+
+        _isRefreshingDockedProperties = true;
+        try
+        {
+            // Let libVLC / MediaViewModel settle briefly before querying MediaInfo
+            await Task.Delay(50);
+            if (!_isDockedSidebarOpen || !ReferenceEquals(ViewModel.Media, media)) return;
+
+            _dockedPropertiesMedia = media;
+
+            if (LeftPropertiesSidebar.Visibility == Visibility.Visible)
+            {
+                LeftPropertiesView.Media = null;
+                LeftPropertiesView.Media = media;
+            }
+
+            if (RightPropertiesSidebar.Visibility == Visibility.Visible)
+            {
+                RightPropertiesView.Media = null;
+                RightPropertiesView.Media = media;
+            }
+        }
+        finally
+        {
+            _isRefreshingDockedProperties = false;
+        }
+    }
+
+    private void DockPropertiesLeft_Click(object sender, RoutedEventArgs e)
+    {
+        PropertiesDialog.PreferredDockMode = PropertiesDockMode.Left;
+        Receive(new PropertiesDockMessage(PropertiesDockMode.Left, _dockedPropertiesMedia, IsOpen: true));
+    }
+
+    private void DockPropertiesRight_Click(object sender, RoutedEventArgs e)
+    {
+        PropertiesDialog.PreferredDockMode = PropertiesDockMode.Right;
+        Receive(new PropertiesDockMessage(PropertiesDockMode.Right, _dockedPropertiesMedia, IsOpen: true));
+    }
+
+    private void FloatProperties_Click(object sender, RoutedEventArgs e)
+    {
+        MediaViewModel? media = _dockedPropertiesMedia;
+        _isDockedSidebarOpen = false;
+        PropertiesDialog.PreferredDockMode = PropertiesDockMode.Floating;
+        LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+        RightPropertiesSidebar.Visibility = Visibility.Collapsed;
+        LeftPropertiesView.Media = null;
+        RightPropertiesView.Media = null;
+
+        if (media != null)
+        {
+            var dialog = new PropertiesDialog { Media = media };
+            _ = dialog.ShowFloatingAsync();
+        }
+    }
+
+    private void CloseDockedProperties_Click(object sender, RoutedEventArgs e)
+    {
+        _isDockedSidebarOpen = false;
+        LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+        RightPropertiesSidebar.Visibility = Visibility.Collapsed;
+        LeftPropertiesView.Media = null;
+        RightPropertiesView.Media = null;
+    }
+
+    private void LeftSidebarSplitter_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        double newWidth = LeftPropertiesSidebar.Width + e.HorizontalChange;
+        LeftPropertiesSidebar.Width = Math.Max(LeftPropertiesSidebar.MinWidth, Math.Min(LeftPropertiesSidebar.MaxWidth, newWidth));
+    }
+
+    private void RightSidebarSplitter_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        double newWidth = RightPropertiesSidebar.Width - e.HorizontalChange;
+        RightPropertiesSidebar.Width = Math.Max(RightPropertiesSidebar.MinWidth, Math.Min(RightPropertiesSidebar.MaxWidth, newWidth));
+    }
+
+    private void SidebarSplitter_PointerEntered(object sender, PointerRoutedEventArgs e) =>
+        Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.SizeWestEast, 0);
+
+    private void SidebarSplitter_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (!e.Pointer.IsInContact)
+        {
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
+        }
+    }
+
+    private void UpdateTrackedMedia()
+    {
+        if (ReferenceEquals(_trackedMedia, ViewModel.Media))
+            return;
+
+        if (_trackedMedia is not null)
+        {
+            _trackedMedia.PropertyChanged -= TrackedMediaOnPropertyChanged;
+        }
+
+        _trackedMedia = ViewModel.Media;
+
+        if (_trackedMedia is not null)
+        {
+            _trackedMedia.PropertyChanged += TrackedMediaOnPropertyChanged;
+        }
+
+        OnMediaThumbnailUpdated();
+    }
+
+    private void TrackedMediaOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MediaViewModel.Thumbnail))
+        {
+            OnMediaThumbnailUpdated();
+        }
+    }
+
+    private void PropertiesSidebar_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _isPointerOverPropertiesSidebar = true;
+        Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
+        ViewModel.ControlsHidden = false;
+        ViewModel.OnPointerMoved();
+    }
+
+    private void PropertiesSidebar_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _isPointerOverPropertiesSidebar = false;
+        ViewModel.OnPointerMoved();
+    }
+
+    private void PropertiesSidebar_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        _isPointerOverPropertiesSidebar = true;
+        if (Window.Current.CoreWindow.PointerCursor == null)
+        {
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
+        }
+
+        ViewModel.OnPointerMoved();
+    }
+
+    private async void OnMediaThumbnailUpdated()
+    {
+        _emptyArtDelayCts?.Cancel();
+        _emptyArtDelayCts = null;
+
+        ImageSource? newThumbnail = _trackedMedia?.Thumbnail;
+
+        if (newThumbnail == null && _trackedMedia != null)
+        {
+            using var cts = _emptyArtDelayCts = new CancellationTokenSource();
+            try
+            {
+                await Task.Delay(1000, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (cts != _emptyArtDelayCts) return;
+            _emptyArtDelayCts = null;
+        }
+
+        AlbumArtImage.ImageSource = newThumbnail;
+        AlbumArtPlaceholder.Visibility = newThumbnail == null ? Visibility.Visible : Visibility.Collapsed;
         PlayBackgroundArtChangeCrossFadeAnimation();
     }
 
@@ -124,15 +364,13 @@ public sealed partial class PlayerPage : Page
         if (ViewModel.PlayerVisibility == PlayerVisibilityState.Visible)
         {
             PlayerTitleBar.RefreshDragRegion();
-            // Focus can fail if player is file activated
-            // Controls are disabled by default until playback is ready
             PlayerControls.FocusFirstButton();
         }
     }
 
     private void BackgroundElementOnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        double overshoot = 200;   // extra space for animation
+        double overshoot = 200;
         double edgeLength = Math.Max(e.NewSize.Width, e.NewSize.Height) + overshoot;
         BackgroundArt.Width = edgeLength;
         BackgroundArt.Height = edgeLength;
@@ -181,7 +419,21 @@ public sealed partial class PlayerPage : Page
     {
         switch (e.PropertyName)
         {
+            case nameof(PlayerPageViewModel.Media):
+                UpdateTrackedMedia();
+                RefreshDockedPropertiesMedia(ViewModel.Media);
+                break;
+            case nameof(PlayerPageViewModel.IsOpening) when !ViewModel.IsOpening:
+                RefreshDockedPropertiesMedia(ViewModel.Media);
+                break;
             case nameof(PlayerPageViewModel.ControlsHidden):
+                if (ViewModel.ControlsHidden && _isPointerOverPropertiesSidebar)
+                {
+                    ViewModel.ControlsHidden = false;
+                    Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
+                    break;
+                }
+
                 VisualStateManager.GoToState(this, ViewModel.ControlsHidden ? "ControlsHidden" : "ControlsVisible", true);
                 if (!ViewModel.ControlsHidden)
                 {
@@ -194,14 +446,18 @@ public sealed partial class PlayerPage : Page
                 {
                     case WindowViewMode.Default:
                         VisualStateManager.GoToState(this, "Normal", true);
+                        RestoreDockedSidebarIfNeeded();
                         break;
                     case WindowViewMode.Compact:
                         ViewModel.PlayerVisibility = PlayerVisibilityState.Visible;
                         VisualStateManager.GoToState(this, "CompactOverlay", true);
+                        LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+                        RightPropertiesSidebar.Visibility = Visibility.Collapsed;
                         break;
                     case WindowViewMode.FullScreen:
                         ViewModel.PlayerVisibility = PlayerVisibilityState.Visible;
                         VisualStateManager.GoToState(this, "Fullscreen", true);
+                        RestoreDockedSidebarIfNeeded();
                         break;
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -221,12 +477,17 @@ public sealed partial class PlayerPage : Page
                         VisualStateManager.GoToState(this, "NoPreview", true);
                         VisualStateManager.GoToState(this, "Normal", true);
                         PlayerTitleBar.RefreshDragRegion();
+                        RestoreDockedSidebarIfNeeded();
                         break;
                     case PlayerVisibilityState.Minimal:
                         VisualStateManager.GoToState(this, "MiniPlayer", true);
+                        LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+                        RightPropertiesSidebar.Visibility = Visibility.Collapsed;
                         break;
                     case PlayerVisibilityState.Hidden:
                         VisualStateManager.GoToState(this, "Hidden", true);
+                        LeftPropertiesSidebar.Visibility = Visibility.Collapsed;
+                        RightPropertiesSidebar.Visibility = Visibility.Collapsed;
                         break;
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -245,8 +506,6 @@ public sealed partial class PlayerPage : Page
                 {
                     if (_startup)
                     {
-                        // Only when the app is file activated
-                        // Wait till playback starts then focus the player controls
                         _startup = false;
                         PlayerControls.FocusFirstButton();
                     }
@@ -262,7 +521,6 @@ public sealed partial class PlayerPage : Page
             case nameof(PlayerPageViewModel.ShowVisualizer):
                 if (ViewModel.ShowVisualizer)
                 {
-                    // Load the visualizer if not already
                     FindName(nameof(LivelyWallpaperPlayer));
                 }
 
@@ -281,10 +539,9 @@ public sealed partial class PlayerPage : Page
 
     private async void PlayBackgroundArtChangeCrossFadeAnimation()
     {
-        // AnimationSet does not throw exception on cancellation
         _animationCancellationTokenSource?.Cancel();
         if (BackgroundElement.Visibility == Visibility.Collapsed ||
-        BackgroundArt.Visibility == Visibility.Collapsed)
+            BackgroundArt.Visibility == Visibility.Collapsed)
         {
             BackgroundImage.Source = AlbumArtImage.ImageSource;
             return;
@@ -325,8 +582,6 @@ public sealed partial class PlayerPage : Page
             : "Video";
         VisualStateManager.GoToState(this, contentVisualStateName, true);
 
-        // Update lively options button visibility
-        // TODO: Use XAML visual state to encode this logic
         LivelyOptionsButton.Visibility = ViewModel.PlayerVisibility == PlayerVisibilityState.Visible &&
                                          ViewModel.ViewMode != WindowViewMode.Compact &&
                                          ViewModel.AudioOnly
@@ -385,8 +640,6 @@ public sealed partial class PlayerPage : Page
 
     private void PlayQueueFlyout_OnOpening(object sender, object e)
     {
-        // Delay load PlayQueueControl until flyout is opening
-        // Save loading time when launching from file
         FindName(nameof(PlayQueue));
     }
 
@@ -403,7 +656,6 @@ public sealed partial class PlayerPage : Page
 
     private void UpdateBackgroundAcrylicOpacity(ElementTheme theme)
     {
-        // Set in code due to XAML compiler not setting it in Release
         BackgroundAcrylicBrush.TintLuminosityOpacity = theme == ElementTheme.Light ? 0.5 : 0.4;
     }
 
@@ -426,8 +678,6 @@ public sealed partial class PlayerPage : Page
 
     private async void VideoView_OnManipulationCompleted(object sender, ManipulationCompletedRoutedEventArgs e)
     {
-        // Reset focus after manipulation
-        // Must be queued in Dispatcher or risk losing focus right after
         await Dispatcher.RunAsync(CoreDispatcherPriority.Low,
             () => PlayerControls.FocusFirstButton(FocusState.Programmatic));
     }
@@ -436,8 +686,6 @@ public sealed partial class PlayerPage : Page
     {
         if (e.NewState.Name == nameof(ControlsHidden))
         {
-            // Handle Space key when the controls are not visible.
-            // Also hide tooltip if there is any.
             HiddenButton.Focus(FocusState.Programmatic);
         }
     }
@@ -550,12 +798,9 @@ public sealed partial class PlayerPage : Page
     {
         return kind switch
         {
-            //PlaybackCommandKind.Rewind or PlaybackCommandKind.FastForward when value is TimeSpan time => Humanizer.ToDuration(time),
-            // Use LRE/PDF marks to prevent RTL BiDi reordering, except for Arabic where it forces Western digit shaping.
             PlaybackCommandKind.Rewind or PlaybackCommandKind.FastForward when value is string timeStr
                 => _isArabicLanguage ? timeStr : $"\u202A{timeStr}\u202C",
             PlaybackCommandKind.Volume when value is int volume => Strings.Resources.VolumeChangeStatusMessage(volume),
-            // Use LRE/PDF marks to prevent RTL BiDi reordering, except for Arabic where it forces Western digit shaping.
             PlaybackCommandKind.RateUp or PlaybackCommandKind.RateDown when value is double rate
                 => _isArabicLanguage ? $"{rate.ToString("0.##", CultureInfo.CurrentCulture)}×" : $"\u202A{rate.ToString("0.##", CultureInfo.CurrentCulture)}×\u202C",
             PlaybackCommandKind.AspectRatio when value is string ratio

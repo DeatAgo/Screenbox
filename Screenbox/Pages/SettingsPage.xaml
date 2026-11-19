@@ -433,6 +433,475 @@
                     </ComboBox>
                 </ctc:SettingsCard>
 
+                <ctc:SettingsCard
+                    Margin="{StaticResource SettingsCardMargin}"
+                    Description="Choose whether media properties open as a pop-up dialog or docked panel"
+                    Header="Properties panel default layout"
+                    HeaderIcon="{ui:FontIcon Glyph=&#xE946;}"
+                    Visibility="{x:Bind helpers:DeviceInfoHelper.IsDesktop}">
+                    <ComboBox MinWidth="150" SelectedIndex="{x:Bind ViewModel.PropertiesDockMode, Mode=TwoWay}">
+                        <interactivity:Interaction.Behaviors>
+                            <behaviors:ComboBoxWidthFromPopupBehavior />
+                        </interactivity:Interaction.Behaviors>
+                        <x:String>Pop-up dialog</x:String>
+                        <x:String>Left panel</x:String>
+                        <x:String>Right panel</x:String>
+                    </ComboBox>
+                </ctc:SettingsCard>
+
+                <!--  Subtitles Appearance  -->
+                <ctc:SettingsExpander
+                    Margin="{StaticResource SettingsCardMargin}"
+                    Description="Customize subtitle language, formatting, font, size, position, colors, outline, and shadow"
+                    Header="{x:Bind strings:Resources.Subtitles}"
+                    HeaderIcon="{ui:FontIcon Glyph=&#xED1E;}">
+                    <interactivity:Interaction.Behaviors>
+                        <behaviors:SettingsExpanderXYNavigationBehavior />
+                    </interactivity:Interaction.Behaviors>
+                    <Button
+                        MinWidth="{StaticResource SettingsCardButtonMinWidth}"
+                        Command="{x:Bind ViewModel.ResetSubtitleAppearanceCommand}"
+                        Content="Reset style" />
+                    <ctc:SettingsExpander.Items>
+                        <!--  Live Preview  -->
+                        <ctc:SettingsCard ContentAlignment="Left">
+                            <StackPanel Spacing="8">
+                                <Border
+                                    MinWidth="320"
+                                    MinHeight="96"
+                                    Padding="16,12"
+                                    HorizontalAlignment="Left"
+                                    Background="#FF202020"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6">
+                                    <Border
+                                        Margin="{x:Bind ViewModel.PreviewSubtitleMargin, Mode=OneWay}"
+                                        Padding="8,4"
+                                        HorizontalAlignment="{x:Bind ViewModel.PreviewHorizontalAlignment, Mode=OneWay}"
+                                        VerticalAlignment="Bottom"
+                                        Background="{x:Bind ViewModel.PreviewBackgroundBrush, Mode=OneWay}"
+                                        CornerRadius="4">
+                                        <Grid>
+                                            <!--  Drop Shadow Simulation  -->
+                                            <TextBlock
+                                                Margin="{x:Bind ViewModel.PreviewShadowMargin, Mode=OneWay}"
+                                                FontFamily="{x:Bind ViewModel.PreviewFontFamily, Mode=OneWay}"
+                                                FontSize="{x:Bind ViewModel.PreviewFontSize, Mode=OneWay}"
+                                                FontWeight="{x:Bind ViewModel.PreviewFontWeight, Mode=OneWay}"
+                                                Foreground="{x:Bind ViewModel.PreviewShadowBrush, Mode=OneWay}"
+                                                Text="Sample subtitle"
+                                                TextAlignment="{x:Bind ViewModel.PreviewTextAlignment, Mode=OneWay}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{x:Bind ViewModel.PreviewShadowVisibility, Mode=OneWay}" />
+                                            <!--  4-Way Outline Simulation  -->
+                                            <TextBlock
+                                                Margin="{x:Bind ViewModel.PreviewOutlineMarginLeft, Mode=OneWay}"
+                                                FontFamily="{x:Bind ViewModel.PreviewFontFamily, Mode=OneWay}"
+                                                FontSize="{x:Bind ViewModel.PreviewFontSize, Mode=OneWay}"
+                                                FontWeight="{x:Bind ViewModel.PreviewFontWeight, Mode=OneWay}"
+                                                Foreground="{x:Bind ViewModel.PreviewOutlineBrush, Mode=OneWay}"
+                                                Text="Sample subtitle"
+                                                TextAlignment="{x:Bind ViewModel.PreviewTextAlignment, Mode=OneWay}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{x:Bind ViewModel.PreviewOutlineVisibility, Mode=OneWay}" />
+                                            <TextBlock
+                                                Margin="{x:Bind ViewModel.PreviewOutlineMarginRight, Mode=OneWay}"
+                                                FontFamily="{x:Bind ViewModel.PreviewFontFamily, Mode=OneWay}"
+                                                FontSize="{x:Bind ViewModel.PreviewFontSize, Mode=OneWay}"
+                                                FontWeight="{x:Bind ViewModel.PreviewFontWeight, Mode=OneWay}"
+                                                Foreground="{x:Bind ViewModel.PreviewOutlineBrush, Mode=OneWay}"
+                                                Text="Sample subtitle"
+                                                TextAlignment="{x:Bind ViewModel.PreviewTextAlignment, Mode=OneWay}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{x:Bind ViewModel.PreviewOutlineVisibility, Mode=OneWay}" />
+                                            <TextBlock
+                                                Margin="{x:Bind ViewModel.PreviewOutlineMarginTop, Mode=OneWay}"
+                                                FontFamily="{x:Bind ViewModel.PreviewFontFamily, Mode=OneWay}"
+                                                FontSize="{x:Bind ViewModel.PreviewFontSize, Mode=OneWay}"
+                                                FontWeight="{x:Bind ViewModel.PreviewFontWeight, Mode=OneWay}"
+                                                Foreground="{x:Bind ViewModel.PreviewOutlineBrush, Mode=OneWay}"
+                                                Text="Sample subtitle"
+                                                TextAlignment="{x:Bind ViewModel.PreviewTextAlignment, Mode=OneWay}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{x:Bind ViewModel.PreviewOutlineVisibility, Mode=OneWay}" />
+                                            <TextBlock
+                                                Margin="{x:Bind ViewModel.PreviewOutlineMarginBottom, Mode=OneWay}"
+                                                FontFamily="{x:Bind ViewModel.PreviewFontFamily, Mode=OneWay}"
+                                                FontSize="{x:Bind ViewModel.PreviewFontSize, Mode=OneWay}"
+                                                FontWeight="{x:Bind ViewModel.PreviewFontWeight, Mode=OneWay}"
+                                                Foreground="{x:Bind ViewModel.PreviewOutlineBrush, Mode=OneWay}"
+                                                Text="Sample subtitle"
+                                                TextAlignment="{x:Bind ViewModel.PreviewTextAlignment, Mode=OneWay}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{x:Bind ViewModel.PreviewOutlineVisibility, Mode=OneWay}" />
+                                            <!--  Main Subtitle Text  -->
+                                            <TextBlock
+                                                FontFamily="{x:Bind ViewModel.PreviewFontFamily, Mode=OneWay}"
+                                                FontSize="{x:Bind ViewModel.PreviewFontSize, Mode=OneWay}"
+                                                FontWeight="{x:Bind ViewModel.PreviewFontWeight, Mode=OneWay}"
+                                                Foreground="{x:Bind ViewModel.PreviewForegroundBrush, Mode=OneWay}"
+                                                Text="Sample subtitle"
+                                                TextAlignment="{x:Bind ViewModel.PreviewTextAlignment, Mode=OneWay}"
+                                                TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+                                </Border>
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="Applies when opening the next video." />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Preferred Subtitle Language  -->
+                        <ctc:SettingsCard Description="Default subtitle track selection when opening videos" Header="Preferred language">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox
+                                    Width="110"
+                                    PlaceholderText="e.g. en,ja"
+                                    Text="{x:Bind ViewModel.SubtitlePreferredLanguageCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{x:Bind ViewModel.IsCustomSubtitleLanguageVisible, Mode=OneWay}" />
+                                <ComboBox
+                                    MinWidth="160"
+                                    ItemsSource="{x:Bind ViewModel.SubtitleLanguageOptions}"
+                                    SelectedIndex="{x:Bind ViewModel.SelectedSubtitleLanguageIndex, Mode=TwoWay}">
+                                    <interactivity:Interaction.Behaviors>
+                                        <behaviors:ComboBoxWidthFromPopupBehavior />
+                                    </interactivity:Interaction.Behaviors>
+                                </ComboBox>
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Allow Embedded Subtitle Formatting  -->
+                        <ctc:SettingsCard Description="Let subtitle files keep their embedded colors and formatting tags" Header="Allow embedded formatting">
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.SubtitleAllowEmbeddedFormatting, Mode=TwoWay}" />
+                        </ctc:SettingsCard>
+
+                        <!--  Font Type  -->
+                        <ctc:SettingsCard Header="Font">
+                            <ComboBox
+                                MinWidth="200"
+                                ItemsSource="{x:Bind ViewModel.SubtitleFontOptions}"
+                                SelectedItem="{x:Bind ViewModel.SubtitleFontFamily, Mode=TwoWay}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock FontFamily="{x:Bind}" Text="{x:Bind}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                                <interactivity:Interaction.Behaviors>
+                                    <behaviors:ComboBoxWidthFromPopupBehavior />
+                                </interactivity:Interaction.Behaviors>
+                            </ComboBox>
+                        </ctc:SettingsCard>
+
+                        <!--  Text Size Slider  -->
+                        <ctc:SettingsCard Header="Text size">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="46"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleTextScaleLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="250"
+                                    Minimum="50"
+                                    StepFrequency="5"
+                                    Value="{x:Bind ViewModel.SubtitleTextScale, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Vertical Margin Slider  -->
+                        <ctc:SettingsCard Header="Vertical margin">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="46"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleMarginLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="200"
+                                    Minimum="0"
+                                    StepFrequency="5"
+                                    Value="{x:Bind ViewModel.SubtitleMargin, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Horizontal Alignment  -->
+                        <ctc:SettingsCard Header="Horizontal alignment">
+                            <ComboBox MinWidth="150" SelectedIndex="{x:Bind ViewModel.SubtitleAlignment, Mode=TwoWay}">
+                                <interactivity:Interaction.Behaviors>
+                                    <behaviors:ComboBoxWidthFromPopupBehavior />
+                                </interactivity:Interaction.Behaviors>
+                                <x:String>Center</x:String>
+                                <x:String>Left</x:String>
+                                <x:String>Right</x:String>
+                            </ComboBox>
+                        </ctc:SettingsCard>
+
+                        <!--  Free Text Color Picker  -->
+                        <ctc:SettingsCard Header="Text color">
+                            <Button
+                                Height="32"
+                                Padding="8,4"
+                                AutomationProperties.Name="Text color">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Border
+                                        Width="32"
+                                        Height="16"
+                                        Background="{x:Bind ViewModel.SubtitleTextSwatchBrush, Mode=OneWay}"
+                                        BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="3" />
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Glyph="&#xE790;" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <ColorPicker
+                                            ColorSpectrumShape="Ring"
+                                            IsAlphaEnabled="False"
+                                            IsColorChannelTextInputVisible="True"
+                                            IsHexInputVisible="True"
+                                            Color="{x:Bind ViewModel.SubtitleTextColor, Mode=TwoWay}" />
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </ctc:SettingsCard>
+
+                        <!--  Text Opacity Slider  -->
+                        <ctc:SettingsCard Header="Text opacity">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="46"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleTextOpacityLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="100"
+                                    Minimum="10"
+                                    StepFrequency="5"
+                                    Value="{x:Bind ViewModel.SubtitleTextOpacityPercent, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Free Background Color Picker  -->
+                        <ctc:SettingsCard Header="Background color">
+                            <Button
+                                Height="32"
+                                Padding="8,4"
+                                AutomationProperties.Name="Background color">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Border
+                                        Width="32"
+                                        Height="16"
+                                        Background="{x:Bind ViewModel.SubtitleBackgroundSwatchBrush, Mode=OneWay}"
+                                        BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="3" />
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Glyph="&#xE790;" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <ColorPicker
+                                            ColorSpectrumShape="Ring"
+                                            IsAlphaEnabled="False"
+                                            IsColorChannelTextInputVisible="True"
+                                            IsHexInputVisible="True"
+                                            Color="{x:Bind ViewModel.SubtitleBackgroundColor, Mode=TwoWay}" />
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </ctc:SettingsCard>
+
+                        <!--  Background Opacity Slider  -->
+                        <ctc:SettingsCard Header="Background opacity">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="46"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleBackgroundOpacityLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="100"
+                                    Minimum="0"
+                                    StepFrequency="5"
+                                    Value="{x:Bind ViewModel.SubtitleBackgroundOpacityPercent, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Outline Thickness Slider  -->
+                        <ctc:SettingsCard Header="Outline thickness">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="72"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleOutlineThicknessLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="6"
+                                    Minimum="0"
+                                    StepFrequency="1"
+                                    Value="{x:Bind ViewModel.SubtitleOutlineThickness, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Free Outline Color Picker  -->
+                        <ctc:SettingsCard Header="Outline color">
+                            <Button
+                                Height="32"
+                                Padding="8,4"
+                                AutomationProperties.Name="Outline color">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Border
+                                        Width="32"
+                                        Height="16"
+                                        Background="{x:Bind ViewModel.SubtitleOutlineSwatchBrush, Mode=OneWay}"
+                                        BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="3" />
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Glyph="&#xE790;" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <ColorPicker
+                                            ColorSpectrumShape="Ring"
+                                            IsAlphaEnabled="False"
+                                            IsColorChannelTextInputVisible="True"
+                                            IsHexInputVisible="True"
+                                            Color="{x:Bind ViewModel.SubtitleOutlineColor, Mode=TwoWay}" />
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </ctc:SettingsCard>
+
+                        <!--  Outline Opacity Slider  -->
+                        <ctc:SettingsCard Header="Outline opacity">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="46"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleOutlineOpacityLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="100"
+                                    Minimum="0"
+                                    StepFrequency="5"
+                                    Value="{x:Bind ViewModel.SubtitleOutlineOpacityPercent, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Drop Shadow Toggle  -->
+                        <ctc:SettingsCard Header="Drop shadow">
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.SubtitleShadow, Mode=TwoWay}" />
+                        </ctc:SettingsCard>
+
+                        <!--  Free Drop Shadow Color Picker  -->
+                        <ctc:SettingsCard Header="Drop shadow color">
+                            <Button
+                                Height="32"
+                                Padding="8,4"
+                                AutomationProperties.Name="Drop shadow color"
+                                IsEnabled="{x:Bind ViewModel.SubtitleShadow, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Border
+                                        Width="32"
+                                        Height="16"
+                                        Background="{x:Bind ViewModel.SubtitleShadowSwatchBrush, Mode=OneWay}"
+                                        BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="3" />
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Glyph="&#xE790;" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <ColorPicker
+                                            ColorSpectrumShape="Ring"
+                                            IsAlphaEnabled="False"
+                                            IsColorChannelTextInputVisible="True"
+                                            IsHexInputVisible="True"
+                                            Color="{x:Bind ViewModel.SubtitleShadowColor, Mode=TwoWay}" />
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </ctc:SettingsCard>
+
+                        <!--  Drop Shadow Angle Slider  -->
+                        <ctc:SettingsCard Header="Drop shadow angle">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="46"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleShadowAngleLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsEnabled="{x:Bind ViewModel.SubtitleShadow, Mode=OneWay}"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="360"
+                                    Minimum="0"
+                                    StepFrequency="15"
+                                    Value="{x:Bind ViewModel.SubtitleShadowAngle, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Drop Shadow Offset Distance Slider  -->
+                        <ctc:SettingsCard Header="Drop shadow distance">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    MinWidth="46"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.SubtitleShadowDistanceLabel, Mode=OneWay}"
+                                    TextAlignment="Right" />
+                                <Slider
+                                    Width="160"
+                                    IsEnabled="{x:Bind ViewModel.SubtitleShadow, Mode=OneWay}"
+                                    IsThumbToolTipEnabled="False"
+                                    Maximum="20"
+                                    Minimum="0"
+                                    StepFrequency="1"
+                                    Value="{x:Bind ViewModel.SubtitleShadowDistance, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctc:SettingsCard>
+
+                        <!--  Bold Toggle  -->
+                        <ctc:SettingsCard Header="Bold">
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.SubtitleBold, Mode=TwoWay}" />
+                        </ctc:SettingsCard>
+                    </ctc:SettingsExpander.Items>
+                </ctc:SettingsExpander>
+
                 <ctc:SettingsExpander
                     Margin="{StaticResource SettingsCardMargin}"
                     Description="{x:Bind strings:Resources.SettingsOnScreenControlsDescription}"

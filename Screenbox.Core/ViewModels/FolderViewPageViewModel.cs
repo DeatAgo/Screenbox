@@ -2,12 +2,14 @@ using Screenbox.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
+using Microsoft.Extensions.DependencyInjection;
 using Screenbox.Core.Factories;
 using Screenbox.Core.Helpers;
 using Screenbox.Core.MediaSources;
@@ -16,6 +18,7 @@ using Screenbox.Core.Services;
 using Windows.Storage;
 using Windows.Storage.Search;
 using Windows.System;
+using Windows.UI.Xaml.Data;
 
 namespace Screenbox.Core.ViewModels;
 
@@ -26,8 +29,8 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
 
     public ObservableCollection<StorageItemViewModel> Items { get; } = [];
 
-    // Due to some regression in BreadcrumbBar, each breadcrumb item must be a string,
-    // so we need to maintain a separate list of StorageFolder for navigation.
+    public SelectionViewModel Selection { get; }
+
     public string[] Breadcrumbs { get; private set; } = [];
 
     public StorageFolder[] BreadcrumbLocations { get; private set; } = [];
@@ -37,6 +40,8 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
     [ObservableProperty] public partial StorageItemViewModel? ContextItem { get; set; }
     [ObservableProperty] public partial bool IsEmpty { get; set; }
     [ObservableProperty] public partial bool IsLoading { get; set; }
+    [ObservableProperty] public partial bool HasVideos { get; set; }
+    [ObservableProperty] public partial bool? AreAllVideosSelected { get; set; } = false;
 
     private readonly IFilesService _filesService;
     private readonly INavigationService _navigationService;
@@ -47,16 +52,59 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
     private bool _isActive;
     private object? _source;
 
-    public FolderViewPageViewModel(IFilesService filesService, INavigationService navigationService,
+    public FolderViewPageViewModel(
+        IFilesService filesService,
+        INavigationService navigationService,
         StorageItemViewModelFactory storageVmFactory)
+        : this(filesService, navigationService, storageVmFactory, new SelectionViewModel())
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public FolderViewPageViewModel(
+        IFilesService filesService,
+        INavigationService navigationService,
+        StorageItemViewModelFactory storageVmFactory,
+        SelectionViewModel selection)
     {
         _filesService = filesService;
         _storageVmFactory = storageVmFactory;
         _navigationService = navigationService;
+        Selection = selection;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _loadingTimer = _dispatcherQueue.CreateTimer();
 
+        Selection.SetItemsSource(Items);
+        ((INotifyCollectionChanged)Selection.SelectedRanges).CollectionChanged += Selection_SelectedRangesChanged;
+
         Messenger.Register<RefreshFolderMessage>(this);
+    }
+
+    private void Selection_SelectedRangesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        PlaySelectedCommand.NotifyCanExecuteChanged();
+        PlaySelectedNextCommand.NotifyCanExecuteChanged();
+        AddSelectedToQueueCommand.NotifyCanExecuteChanged();
+        UpdateAreAllVideosSelected();
+    }
+
+    private void UpdateAreAllVideosSelected()
+    {
+        int videoCount = Items.Count(i => i.Media != null);
+        int selectedCount = Selection.SelectedRanges.Sum(r => (int)r.Length);
+        HasVideos = videoCount > 0;
+        if (videoCount == 0 || selectedCount == 0)
+        {
+            AreAllVideosSelected = false;
+        }
+        else if (selectedCount >= videoCount)
+        {
+            AreAllVideosSelected = true;
+        }
+        else
+        {
+            AreAllVideosSelected = null;
+        }
     }
 
     public void Receive(RefreshFolderMessage message)
@@ -69,6 +117,7 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
     {
         _isActive = true;
         _source = parameter;
+        Selection.DisableSelectionMode();
         NavData = parameter as NavigationMetadata;
         await FetchContentAsync(NavData?.Parameter ?? parameter);
     }
@@ -112,8 +161,7 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
             case StorageFileQueryResult queryResult:
                 await FetchQueryItemAsync(queryResult);
                 break;
-            case "VideosLibrary":   // Special case for VideosPage
-                // VideosPage needs to serialize navigation state so it cannot set nav data
+            case "VideosLibrary":
                 try
                 {
                     BreadcrumbLocations = [SystemInformation.IsXbox ? KnownFolders.RemovableDevices : KnownFolders.VideosLibrary];
@@ -123,10 +171,11 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
                 }
                 catch (Exception)
                 {
-                    // pass
                 }
                 break;
         }
+
+        UpdateAreAllVideosSelected();
     }
 
     public void OnNavigatedFrom()
@@ -136,10 +185,50 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
 
     protected virtual void Navigate(object? parameter = null)
     {
-        // _navigationService.NavigateExisting(typeof(FolderViewPageViewModel), parameter);
         _navigationService.Navigate(typeof(FolderViewPageViewModel),
             new NavigationMetadata(NavData?.RootViewModelType ?? typeof(FolderViewPageViewModel), parameter));
     }
+
+    [RelayCommand]
+    private void SelectAllOrNoneVideos()
+    {
+        if (AreAllVideosSelected == true)
+        {
+            Selection.ClearSelection();
+            return;
+        }
+
+        var videoRanges = new List<ItemIndexRange>();
+        int start = -1;
+        for (int i = 0; i < Items.Count; i++)
+        {
+            bool isVideo = Items[i].Media != null;
+            if (isVideo && start == -1)
+            {
+                start = i;
+            }
+            else if (!isVideo && start != -1)
+            {
+                videoRanges.Add(new ItemIndexRange(start, (uint)(i - start)));
+                start = -1;
+            }
+        }
+
+        if (start != -1)
+        {
+            videoRanges.Add(new ItemIndexRange(start, (uint)(Items.Count - start)));
+        }
+
+        Selection.SetRanges(videoRanges);
+    }
+
+    private List<MediaViewModel> GetSelectedVideos() =>
+        Selection.GetSelectedItems<StorageItemViewModel>()
+            .Where(i => i.Media != null)
+            .Select(i => i.Media!)
+            .ToList();
+
+    private bool HasSelectedVideos() => GetSelectedVideos().Count > 0;
 
     [RelayCommand]
     private void Play(StorageItemViewModel? item)
@@ -158,6 +247,36 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
                 : QueueOrigin.ForSingleMedia(item.Media);
             Messenger.SendQueueAndPlay(item.Media, _playableItems, true, origin);
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelectedVideos))]
+    private void PlaySelected()
+    {
+        List<MediaViewModel> selected = GetSelectedVideos();
+        if (selected.Count == 0) return;
+        Selection.DisableSelectionMode();
+        var origin = QueueOrigin.ForMediaCollection(
+            !string.IsNullOrEmpty(TitleText) ? TitleText : selected[0].Name,
+            BreadcrumbLocations.LastOrDefault()?.Path);
+        Messenger.SendQueueAndPlay(selected[0], selected, true, origin);
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelectedVideos))]
+    private void PlaySelectedNext()
+    {
+        List<MediaViewModel> selected = GetSelectedVideos();
+        if (selected.Count == 0) return;
+        Selection.ClearSelection();
+        Messenger.SendPlayNext(selected);
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelectedVideos))]
+    private void AddSelectedToQueue()
+    {
+        List<MediaViewModel> selected = GetSelectedVideos();
+        if (selected.Count == 0) return;
+        Selection.ClearSelection();
+        Messenger.SendAddToQueue(selected);
     }
 
     [RelayCommand]
@@ -212,6 +331,7 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
         _loadingTimer.Stop();
         IsLoading = false;
         IsEmpty = Items.Count == 0;
+        UpdateAreAllVideosSelected();
     }
 
     private async Task FetchFolderContentAsync(StorageFolder folder)
@@ -238,6 +358,7 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
         _loadingTimer.Stop();
         IsLoading = false;
         IsEmpty = Items.Count == 0;
+        UpdateAreAllVideosSelected();
     }
 
     private async Task FetchFolderContentAsync(StorageLibrary library)
@@ -250,8 +371,6 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
 
         if (library.Folders.Count == 1)
         {
-            // StorageLibrary is always the root
-            // Fetch content of the only folder if applicable
             StorageFolder folder = library.Folders[0];
             BreadcrumbLocations = [folder];
             Breadcrumbs = [folder.DisplayName];
@@ -268,6 +387,7 @@ public partial class FolderViewPageViewModel : ObservableRecipient,
             }
 
             IsEmpty = Items.Count == 0;
+            UpdateAreAllVideosSelected();
         }
     }
 

@@ -26,7 +26,8 @@ using Windows.UI.Input;
 namespace Screenbox.Core.ViewModels;
 
 public sealed partial class PlayerElementViewModel : ObservableRecipient,
-    IRecipient<ChangeAspectRatioMessage>
+    IRecipient<ChangeAspectRatioMessage>,
+    IRecipient<ReinitializePlayerMessage>
 {
     private const double GestureStepAmount = 5.0;
 
@@ -59,6 +60,7 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
     private readonly DisplayRequestTracker _requestTracker;
     private readonly ILogger<PlayerElementViewModel> _logger;
     private CancellationTokenSource? _initCts;
+    private string[]? _swapChainOptions;
     private Size _viewSize;
     private Size _aspectRatio;
     private TimeSpan _timeBeforeManipulation;
@@ -87,6 +89,7 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         transportControlsService.TransportControls.PlaybackPositionChangeRequested += TransportControlsOnPlaybackPositionChangeRequested;
 
         Messenger.Register<ChangeAspectRatioMessage>(this);
+        Messenger.Register<ReinitializePlayerMessage>(this);
     }
 
     public void Receive(ChangeAspectRatioMessage message)
@@ -95,8 +98,18 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         SetCropGeometry(message.Value);
     }
 
+    public void Receive(ReinitializePlayerMessage message)
+    {
+        if (_swapChainOptions != null)
+        {
+            Initialize(_swapChainOptions);
+        }
+    }
+
     public void Initialize(string[] swapChainOptions)
     {
+        _swapChainOptions = swapChainOptions;
+
         // Unsubscribe events and set MediaPlayer to null immediately so that
         // downstream consumers (e.g. PlayQueueCoordinator._delayPlay) know the player
         // is unavailable and queue any incoming playback requests for later processing.
@@ -230,18 +243,6 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         Messenger.Send(new TimeChangeOverrideMessage(false));
     }
 
-    /// <summary>
-    /// Interprets a pointer wheel input and requests changes to the current playback.
-    /// </summary>
-    /// <remarks>
-    /// The pointer wheel vertical component adjusts the playback volume, while the
-    /// horizontal component seeks the current media playback position.
-    /// </remarks>
-    /// <param name="delta">The pointer wheel delta.</param>
-    /// <param name="isHorizontal"><see langword="true"/> to treat the input as horizontal;
-    /// otherwise, <see langword="false"/> to treat it as vertical.</param>
-    /// <param name="isTouchpad"><see langword="true"/> if the input originated from a touchpad;
-    /// <see langword="false"/> if from a mouse; or <see langword="null"/> to detect automatically via delta heuristics.</param>
     public void ProcessPointerWheelInput(int delta, bool isHorizontal, bool? isTouchpad = null)
     {
         if (!isHorizontal)
@@ -253,22 +254,15 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         }
         else if (MediaPlayer?.CanSeek ?? false)
         {
-            // Pointer wheel events can be fired in quick succession and still count as a single seek action from the user's perspective.
-            // Debounce setting the time before manipulation to calculate the culmulative change correctly.
             _pointerWheelTimer.Debounce(() => _timeBeforeManipulation = MediaPlayer.Position, TimeSpan.FromSeconds(1), true);
             Messenger.Send(new TimeChangeOverrideMessage(true));
-            // For mouse wheel, each detent is 120. For touchpad, it can be a smaller value.
-            var seekAmount = -(delta / 12.0);   // Each mouse wheel detent corresponds to a 10 second seek. Touchpad has more precision.
+            var seekAmount = -(delta / 12.0);
             seekAmount = Math.Abs(seekAmount) < 0.5 ? Math.Sign(seekAmount) * 0.5 : seekAmount;
             var newTime = Messenger.Send(new ChangeTimeRequestMessage(TimeSpan.FromSeconds(seekAmount), true)).Response.NewPosition;
             UpdateTimeStatusMessage(newTime);
         }
     }
 
-    /// <summary>
-    /// Interprets a swipe manipulation and requests the corresponding playback interaction.
-    /// </summary>
-    /// <param name="cumulative">The cumulative translation of the pointer manipulation.</param>
     public void ProcessSwipeGesture(Point cumulative)
     {
         const double SwipeThreshold = 100.0;
@@ -293,15 +287,6 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         ProcessPlayerGesture(gesture, GestureStepAmount);
     }
 
-    /// <summary>
-    /// Interprets a slide manipulation and requests the corresponding playback interaction.
-    /// </summary>
-    /// <param name="delta">The change in pointer position since the last event.</param>
-    /// <param name="cumulative">The cumulative translation of the pointer manipulation.</param>
-    /// <remarks>
-    /// The vertical slide gesture adjusts the playback volume, and the horizontal
-    /// slide gesture performs a time seek relative to the current position.
-    /// </remarks>
     public void ProcessSlideGesture(Point delta, Point cumulative)
     {
         const double HorizontalStepAmountPerPixel = 200;
@@ -340,12 +325,6 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         }
     }
 
-    /// <summary>
-    /// Interprets a holding gesture and adjusts the playback rate based on the state.
-    /// </summary>
-    /// <remarks>Increases the playback rate while holding, and restores it on release.</remarks>
-    /// <param name="holdingState">A value of the enumeration that specifies the current
-    /// state of the holding gesture.</param>
     public void ProcessHoldingGesture(HoldingState holdingState)
     {
         const double HoldingSpeed = 2.0;
@@ -357,7 +336,6 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         {
             case HoldingState.Started when !IsHolding:
                 _playbackRateBeforeHold = MediaPlayer.PlaybackRate;
-                // If the rate is already faster than the holding speed, set it to twice the holding speed.
                 double effectiveHoldingSpeed = MediaPlayer.PlaybackRate >= HoldingSpeed ? HoldingSpeed * 2.0 : HoldingSpeed;
                 if (MediaPlayer.PlaybackRate != effectiveHoldingSpeed)
                 {
@@ -564,4 +542,3 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
             .ShowMessage());
     }
 }
-

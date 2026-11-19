@@ -37,10 +37,32 @@
                 SelectCommand="{x:Bind ViewModel.Selection.SelectItemCommand}">
                 <flyouts:MediaMenuFlyout.AdditionalItems>
                     <MenuFlyoutItem
+                        Command="{x:Bind ViewModel.MovePlaylistUpCommand}"
+                        CommandParameter="{x:Bind ViewModel.ContextPlaylist, Mode=OneWay}"
+                        Icon="{ui:FontIcon Glyph=&#xE74A;}"
+                        Text="{x:Bind strings:Resources.MoveUp}" />
+                    <MenuFlyoutItem
+                        Command="{x:Bind ViewModel.MovePlaylistDownCommand}"
+                        CommandParameter="{x:Bind ViewModel.ContextPlaylist, Mode=OneWay}"
+                        Icon="{ui:FontIcon Glyph=&#xE74B;}"
+                        Text="{x:Bind strings:Resources.MoveDown}" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem
                         Command="{x:Bind RenamePlaylistCommand}"
                         CommandParameter="{x:Bind ViewModel.ContextPlaylist, Mode=OneWay}"
                         Icon="{ui:SymbolIcon Symbol=Rename}"
                         Text="{x:Bind strings:Resources.Rename}" />
+                    <MenuFlyoutItem
+                        Command="{x:Bind SetPlaylistThumbnailCommand}"
+                        CommandParameter="{x:Bind ViewModel.ContextPlaylist, Mode=OneWay}"
+                        Icon="{ui:FontIcon Glyph=&#xEB9F;}"
+                        Text="Change cover" />
+                    <MenuFlyoutItem
+                        Command="{x:Bind ResetPlaylistThumbnailCommand}"
+                        CommandParameter="{x:Bind ViewModel.ContextPlaylist, Mode=OneWay}"
+                        Icon="{ui:SymbolIcon Symbol=Undo}"
+                        Text="Reset cover"
+                        Visibility="{x:Bind ViewModel.ContextPlaylist.HasCustomThumbnail, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}" />
                     <MenuFlyoutItem
                         Command="{x:Bind ExportPlaylistCommand}"
                         CommandParameter="{x:Bind ViewModel.ContextPlaylist, Mode=OneWay}"
@@ -162,8 +184,17 @@
                 IsRemoveButtonVisible="False"
                 PlayButtonCommand="{x:Bind ViewModel.PlaySelectedCommand}"
                 PlayNextButtonCommand="{x:Bind ViewModel.PlaySelectedNextCommand}"
+                Selection="{x:Bind ViewModel.Selection}"
                 Visibility="Collapsed">
                 <controls:SelectionBarControl.AdditionalCommands>
+                    <AppBarButton
+                        Command="{x:Bind ViewModel.MoveSelectedPlaylistUpCommand}"
+                        Icon="{ui:FontIcon Glyph=&#xE74A;}"
+                        Label="{x:Bind strings:Resources.MoveUp}" />
+                    <AppBarButton
+                        Command="{x:Bind ViewModel.MoveSelectedPlaylistDownCommand}"
+                        Icon="{ui:FontIcon Glyph=&#xE74B;}"
+                        Label="{x:Bind strings:Resources.MoveDown}" />
                     <AppBarButton
                         Command="{x:Bind ViewModel.DeleteSelectedCommand}"
                         Icon="Delete"
@@ -183,6 +214,9 @@
             Padding="{StaticResource GridViewContentPagePadding}"
             ui:ListViewExtensions.Command="{x:Bind Common.OpenPlaylistCommand}"
             ui:ScrollViewerExtensions.VerticalScrollBarMargin="{x:Bind Common.ScrollBarMargin, Mode=OneWay}"
+            AllowDrop="True"
+            CanDragItems="True"
+            CanReorderItems="True"
             IsItemClickEnabled="True"
             ItemContainerStyle="{StaticResource GridViewItemMediaCardStyle}"
             ItemTemplate="{StaticResource PlaylistGridViewItemTemplate}"

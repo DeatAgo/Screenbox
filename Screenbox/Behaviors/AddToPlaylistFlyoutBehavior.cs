@@ -30,22 +30,12 @@ internal sealed partial class AddToPlaylistFlyoutBehavior : Behavior<MenuFlyout>
         set => SetValue(DataContextProperty, value);
     }
 
-    /// <summary>
-    /// Identifies the <see cref="TargetSubItem"/> dependency property.
-    /// </summary>
     public static readonly DependencyProperty TargetSubItemProperty = DependencyProperty.Register(
         nameof(TargetSubItem),
         typeof(MenuFlyoutSubItem),
         typeof(AddToPlaylistFlyoutBehavior),
         new PropertyMetadata(null));
 
-    /// <summary>
-    /// Gets or sets the target <see cref="MenuFlyoutSubItem"/> to populate with playlist actions.
-    /// </summary>
-    /// <remarks>
-    /// If not specified, the root level of the <see cref="MenuFlyout"/> will be populated.
-    /// </remarks>
-    /// <value>The target <see cref="MenuFlyoutSubItem"/>. The default is <see langword="null"/>.</value>
     public MenuFlyoutSubItem? TargetSubItem
     {
         [DynamicWindowsRuntimeCast(typeof(MenuFlyoutSubItem))]
@@ -67,15 +57,12 @@ internal sealed partial class AddToPlaylistFlyoutBehavior : Behavior<MenuFlyout>
     protected override void OnAttached()
     {
         base.OnAttached();
-
-        // Populate each time the flyout opens, so it reflects the latest playlists.
         AssociatedObject.Opening += AssociatedObjectOnOpening;
     }
 
     protected override void OnDetaching()
     {
         base.OnDetaching();
-
         AssociatedObject.Opening -= AssociatedObjectOnOpening;
     }
 
@@ -87,14 +74,8 @@ internal sealed partial class AddToPlaylistFlyoutBehavior : Behavior<MenuFlyout>
 
     private void PopulateMenu()
     {
-        // The DataContext set at behavior level takes precedence, then the DataContext of the target sub-menu (if specified),
-        // and finally the DataContext of the element
         object? dataContext = DataContext;
-
-        // If a TargetSubItem is specified, we want to populate that sub-menu instead of the root level of the flyout.
         IList<MenuFlyoutItemBase> menuItems = TargetSubItem?.Items ?? AssociatedObject.Items;
-
-        // If no DataContext is set at the behavior or sub-menu level, we can try to fall back to the target element's DataContext
         dataContext ??= _flyoutTarget?.DataContext;
 
         MediaViewModel[] contextItems = dataContext switch
@@ -103,10 +84,10 @@ internal sealed partial class AddToPlaylistFlyoutBehavior : Behavior<MenuFlyout>
             MediaViewModel vm => [vm],
             AlbumViewModel album => album.OrderedSongs.ToArray(),
             ArtistViewModel artist => artist.OrderedSongs.ToArray(),
-            SelectionViewModel selection => selection.GetSelectedItems<MediaViewModel>().ToArray(),
+            SelectionViewModel selection => ExtractMediaItems(selection.GetSelectedItems()),
             IReadOnlyList<MediaViewModel> list => list.ToArray(),
             IEnumerable<MediaViewModel> collection => collection.ToArray(),
-            IEnumerable<object> objects => objects.OfType<MediaViewModel>().ToArray(),
+            IEnumerable<object> objects => ExtractMediaItems(objects),
             _ => [],
         };
 
@@ -142,6 +123,25 @@ internal sealed partial class AddToPlaylistFlyoutBehavior : Behavior<MenuFlyout>
         }
     }
 
+    private static MediaViewModel[] ExtractMediaItems(IEnumerable<object> items)
+    {
+        var result = new List<MediaViewModel>();
+        foreach (object item in items)
+        {
+            switch (item)
+            {
+                case MediaViewModel media:
+                    result.Add(media);
+                    break;
+                case StorageItemViewModel { Media: { } storageMedia }:
+                    result.Add(storageMedia);
+                    break;
+            }
+        }
+
+        return result.ToArray();
+    }
+
     private async Task CreatePlaylistAsync(IEnumerable<MediaViewModel>? itemsToAdd)
     {
         var playlistName = await CreatePlaylistDialog.GetPlaylistNameAsync();
@@ -159,8 +159,6 @@ internal sealed partial class AddToPlaylistFlyoutBehavior : Behavior<MenuFlyout>
         }
 
         await playlist.SaveAsync();
-
-        // Assume sort by last updated
         _playlistsContext.Playlists.Insert(0, playlist);
     }
 }

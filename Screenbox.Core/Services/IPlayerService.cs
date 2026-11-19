@@ -10,4 +10,6 @@ public interface IPlayerService
     IPlaybackItem CreatePlaybackItem(IMediaPlayer player, IMediaSource source, params string[] options);
 
     void DisposePlayer(IMediaPlayer player);
+
+    bool AreSubtitleSettingsDirty() => false;
 }

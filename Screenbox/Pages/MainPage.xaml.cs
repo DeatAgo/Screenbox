@@ -352,7 +352,7 @@ public sealed partial class MainPage : Page, IContentFrame
 
     /// <summary>
     /// Give the <see cref="NavViewSearchBox"/> text entry box focus ("Focused" visual state) through the access key combination.
-    /// </summary
+    /// </summary>
     private void NavViewSearchBox_OnAccessKeyInvoked(UIElement sender, AccessKeyInvokedEventArgs args)
     {
         NavViewSearchBox.Focus(FocusState.Keyboard);

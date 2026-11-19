@@ -9,6 +9,8 @@ public sealed class PlaylistRecordDto
 
     public string DisplayName { get; set; } = string.Empty;
 
+    public string? CustomThumbnailPath { get; set; }
+
     public DateTimeOffset LastUpdated { get; set; }
 
     public List<RawMediaRecordDto> Items { get; set; } = new();

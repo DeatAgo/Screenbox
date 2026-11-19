@@ -3,8 +3,6 @@ using Screenbox.Core.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
-// The User Control item template is documented at https://go.microsoft.com/fwlink/?LinkId=234236
-
 namespace Screenbox.Controls;
 
 public sealed partial class PropertiesView : UserControl
@@ -37,12 +35,13 @@ public sealed partial class PropertiesView : UserControl
         Bindings.Update();
     }
 
-    private static void OnMediaChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static async void OnMediaChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         PropertiesView view = (PropertiesView)d;
         MediaViewModel? media = (MediaViewModel?)e.NewValue;
         if (media == null) return;
 
-        view.ViewModel.UpdateProperties(media);
+        await view.ViewModel.LoadPropertiesAsync(media);
+        view.Bindings.Update();
     }
 }

@@ -13,11 +13,11 @@ using Microsoft.Extensions.Logging;
 using Screenbox.Core.Contexts;
 using Screenbox.Core.Enums;
 using Screenbox.Core.Helpers;
+using Screenbox.Core.MediaSources;
 using Screenbox.Core.Messages;
 using Screenbox.Core.Playback;
 using Screenbox.Core.Services;
 using Windows.Storage;
-using Screenbox.Core.MediaSources;
 using Windows.Storage.Search;
 
 namespace Screenbox.Core.ViewModels;
@@ -77,7 +77,9 @@ public sealed partial class CompositeTrackPickerViewModel : ObservableRecipient,
     private bool _flyoutOpened;
     private CancellationTokenSource? _cts;
 
-    public CompositeTrackPickerViewModel(PlayerContext playerContext, IFilesService filesService,
+    public CompositeTrackPickerViewModel(
+        PlayerContext playerContext,
+        IFilesService filesService,
         PlaybackSettingsContext playbackSettings,
         ILogger<CompositeTrackPickerViewModel> logger)
     {
@@ -195,7 +197,7 @@ public sealed partial class CompositeTrackPickerViewModel : ObservableRecipient,
                 var strictRegexPattern = "^" + string.Join(".*", escapedTokens) + ".*$";
                 IReadOnlyList<StorageFile> files = await neighboringFilesQuery.GetFilesAsync(0, 50);
                 subtitles = files.Where(f =>
-                       f.IsSupportedSubtitle() && Regex.IsMatch(f.Name, strictRegexPattern, RegexOptions.IgnoreCase))
+                        f.IsSupportedSubtitle() && Regex.IsMatch(f.Name, strictRegexPattern, RegexOptions.IgnoreCase))
                     .ToArray();
                 if (subtitles.Count == 0 && tokens.Length > 1)
                 {

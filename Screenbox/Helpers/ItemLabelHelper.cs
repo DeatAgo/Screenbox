@@ -134,6 +134,29 @@ public static class ItemLabelHelper
     {
         return property switch
         {
+
+            // General / MediaInfo tags
+            MediaProperty.CompleteName => "Filename",
+            MediaProperty.OverallBitRate => "Overall bitrate",
+            MediaProperty.FrameRate => "Framerate",
+            MediaProperty.Performer => "Creator",
+            MediaProperty.Description => "Description",
+            MediaProperty.RecordedDate => "Recorded date",
+            MediaProperty.Comment => "Comments",
+
+            // Video tags
+            MediaProperty.Format => "Video format",
+            MediaProperty.Width => "Width",
+            MediaProperty.Height => "Height",
+            MediaProperty.DisplayAspectRatio => "Aspect ratio",
+
+            // Audio tags
+            MediaProperty.AudioFormat => "Audio format",
+            MediaProperty.AudioBitRate => "Audio bitrate",
+            MediaProperty.AudioSamplingRate => "Sampling rate",
+            MediaProperty.AudioBitDepth => "Bit depth",
+
+            // Existing localized properties
             MediaProperty.Title => Strings.Resources.PropertyTitle,
             MediaProperty.Subtitle => Strings.Resources.PropertySubtitle,
             MediaProperty.Year => Strings.Resources.PropertyYear,

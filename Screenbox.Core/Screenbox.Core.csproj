@@ -17,8 +17,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="CommunityToolkit.Uwp.Extensions" Version="8.2.251219" />
     <PackageReference Include="LibVLCSharp.UWP" Version="3.10.2" />
+    <PackageReference Include="MediaInfo.Native" Version="26.10.0" />
+    <PackageReference Include="MediaInfo.Wrapper.Core" Version="26.10.0" Aliases="MediaInfoLib" PrivateAssets="compile" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0" />
   </ItemGroup>
 </Project>

@@ -25,21 +25,6 @@ using Windows.System;
 
 namespace Screenbox.Core.Coordinators;
 
-/// <summary>
-/// Stateful coordinator that owns the global play queue for the duration of the app session.
-/// </summary>
-/// <remarks>
-/// <para>
-/// This coordinator handles all play queue mutations, playback navigation commands,
-/// Windows System Media Transport Controls wiring, media player event handling,
-/// and thumbnail pre-buffering for items adjacent to the current position.
-/// </para>
-/// <para>
-/// All observable state is written to <see cref="PlayQueueContext"/>.
-/// ViewModels should inject <see cref="PlayQueueContext"/> for data binding and
-/// <see cref="IPlayQueueCoordinator"/> when they need to trigger queue mutations.
-/// </para>
-/// </remarks>
 public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQueueCoordinator,
     IRecipient<PlayMediaMessage>,
     IRecipient<SetQueueMessage>,
@@ -62,17 +47,16 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
     private readonly MediaViewModelFactory _mediaFactory;
     private readonly PlayerContext _playerContext;
     private readonly IPlayQueueBufferManager _bufferManager;
+    private readonly IPlayerService? _playerService;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly ILogger<PlayQueueCoordinator> _logger;
 
-    // Internal playlist model — separate from the observable context.Items collection.
-    // Tracks shuffle backup, current index, and provides a snapshot for service calls.
     private QueueSession _queueSession;
 
     private Func<Task>? _delayPlay;
+    private MediaViewModel? _pendingSeekItem;
+    private TimeSpan _pendingSeekPosition;
 
-    // When true, collection-changed events are deferred to avoid excessive
-    // updates during bulk operations (e.g. ApplyQueueSnapshot, ClearQueue).
     private bool _deferCollectionChanged;
 
     private CancellationTokenSource? _currentItemCts;
@@ -84,7 +68,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         PlayQueueContext context,
         IQueueService queueService,
         IPlaybackControlService playbackControlService,
-
         IFilesService filesService,
         GeneralSettingsContext generalSettings,
         PlaybackSettingsContext playbackSettings,
@@ -92,13 +75,12 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         MediaViewModelFactory mediaFactory,
         PlayerContext playerContext,
         IPlayQueueBufferManager bufferManager,
-        ILogger<PlayQueueCoordinator> logger)
+        ILogger<PlayQueueCoordinator> logger,
+        IPlayerService? playerService = null)
     {
         _context = context;
         _queueService = queueService;
         _playbackControlService = playbackControlService;
-
-
         _filesService = filesService;
         _generalSettings = generalSettings;
         _playbackSettings = playbackSettings;
@@ -106,21 +88,18 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         _mediaFactory = mediaFactory;
         _playerContext = playerContext;
         _bufferManager = bufferManager;
+        _playerService = playerService;
         _logger = logger;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         _queueSession = new QueueSession { SessionId = Guid.Empty };
 
-        // Initialize context with persisted repeat mode.
         _context.RepeatMode = playbackSettings.RepeatMode;
 
-        // React to context property changes.
         _context.PropertyChanged += OnContextPropertyChanged;
 
-        // Keep internal QueueSession model in sync with the observable Items collection.
         _context.Items.CollectionChanged += OnCollectionChanged;
 
-        // Wire transport controls buttons to commands.
         _transportControlsService.TransportControls.ButtonPressed += TransportControlsOnButtonPressed;
         _transportControlsService.TransportControls.AutoRepeatModeChangeRequested += TransportControlsOnAutoRepeatModeChangeRequested;
 
@@ -142,11 +121,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     #region Message Handlers
 
-    /// <summary>
-    /// Handles a request to play a single media item.
-    /// Clears the queue first unless <see cref="PlayMediaMessage.Existing"/> is true,
-    /// in which case the item is played from within the current queue.
-    /// </summary>
     public async void Receive(PlayMediaMessage message)
     {
         if (MediaPlayer is null)
@@ -172,19 +146,13 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
     }
 
-    /// <summary>Handles a request to clear the play queue.</summary>
     public void Receive(ClearQueueMessage message)
     {
         Clear();
     }
 
-    /// <summary>
-    /// Handles a request to replace the play queue with a new playlist.
-    /// </summary>
     public void Receive(SetQueueMessage message)
     {
-        // Note: we do not clone the playlist here so the sender retains control.
-        // TODO: Consider cloning to prevent external modifications to the loaded playlist.
         var playNext = message.Value.CurrentItem;
         bool shouldPlay = message.ShouldPlay && playNext is not null;
         ApplyQueueSnapshot(message.Value, shouldPlay: shouldPlay && MediaPlayer is not null);
@@ -198,41 +166,27 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
     }
 
-    /// <summary>
-    /// Handles an update to playback options for a media item.
-    /// Updates the media's options and invalidates any cached playback item
-    /// if the item is not currently active.
-    /// </summary>
     public void Receive(UpdateMediaOptionsMessage message)
     {
         var (media, options) = message;
         media.SetOptions(options);
 
-        // If the item is pre-buffered but not currently playing,
-        // evict it so it will be freshly created with new options when played.
         if (media != _context.CurrentItem)
         {
             _bufferManager.CleanPlaybackItem(media);
         }
     }
 
-    /// <summary>Returns a snapshot copy of the current queue to the requester.</summary>
     public void Receive(QueueRequestMessage message)
     {
         message.Reply(new QueueSession(_queueSession));
     }
 
-    /// <summary>Returns the current queue playback state snapshot to the requester.</summary>
     public void Receive(QueuePlaybackStateRequestMessage message)
     {
         message.Reply(GetCurrentPlaybackState());
     }
 
-    /// <summary>
-    /// Reacts to the active <see cref="IMediaPlayer"/> being replaced.
-    /// Re-subscribes to media events on the new player and replays any
-    /// deferred play request that arrived before the player was ready.
-    /// </summary>
     public async void Receive(PropertyChangedMessage<IMediaPlayer?> message)
     {
         if (message.Sender is not PlayerContext) return;
@@ -261,8 +215,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                 Func<Task> pending = _delayPlay;
                 _delayPlay = null;
 
-                // Yield so all synchronous subscribers to PropertyChangedMessage<IMediaPlayer?>
-                // finish wiring up the new player before delayed playback starts.
                 await Task.Yield();
                 try
                 {
@@ -280,12 +232,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     #region Context Property Change Handlers
 
-    /// <summary>
-    /// Reacts to observable property changes on <see cref="PlayQueueContext"/>.
-    /// Triggers post-processing when <see cref="PlayQueueContext.CurrentItem"/> changes, and
-    /// handles <see cref="PlayQueueContext.ShuffleMode"/> and <see cref="PlayQueueContext.RepeatMode"/>
-    /// changes.
-    /// </summary>
     private async void OnContextPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -342,19 +288,16 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     #region IPlayQueueCoordinator Implementation
 
-    /// <inheritdoc/>
     public bool CanNext()
     {
         return _playbackControlService.CanNext(_queueSession, _context.RepeatMode);
     }
 
-    /// <inheritdoc/>
     public bool CanPrevious()
     {
         return _playbackControlService.CanPrevious(_queueSession, _context.RepeatMode);
     }
 
-    /// <inheritdoc/>
     public async Task NextAsync()
     {
         var result = await _playbackControlService.GetNextAsync(_queueSession, _context.RepeatMode);
@@ -364,12 +307,10 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
     }
 
-    /// <inheritdoc/>
     public async Task PreviousAsync()
     {
         if (MediaPlayer is null) return;
 
-        // If more than 5 seconds in, restart the current track instead of going back.
         if (MediaPlayer.PlaybackState == MediaPlaybackState.Playing &&
             MediaPlayer.Position > TimeSpan.FromSeconds(5))
         {
@@ -384,14 +325,14 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
         else
         {
-            // At the beginning of the queue with no repeat — restart the current track.
             MediaPlayer.Position = TimeSpan.Zero;
         }
     }
 
-    /// <inheritdoc/>
     public void Clear()
     {
+        _pendingSeekItem = null;
+        _pendingSeekPosition = TimeSpan.Zero;
         ClearQueue();
         SetCurrentItem(null);
     }
@@ -400,7 +341,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     #region Public Methods
 
-    /// <inheritdoc/>
     public void Enqueue(IReadOnlyList<MediaViewModel> items, int insertIndex = -1)
     {
         foreach (var item in items)
@@ -417,10 +357,8 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
     }
 
-    /// <inheritdoc/>
     public void Remove(MediaViewModel item)
     {
-        // Stop playback before removing the active item.
         if (_context.CurrentItem == item)
         {
             SetCurrentItem(null);
@@ -430,23 +368,47 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         _context.Items.Remove(item);
     }
 
-    /// <inheritdoc/>
     public void InsertNext(MediaViewModel item)
     {
-        // Insert a copy so that the same MediaViewModel isn't in the queue twice.
         _context.Items.Insert(_context.CurrentIndex + 1, new MediaViewModel(item));
     }
 
-    /// <inheritdoc/>
     public void ResetCurrentItem()
     {
         var item = _context.CurrentItem;
+        TimeSpan resumePos = MediaPlayer?.Position ?? TimeSpan.Zero;
+        bool wasPlaying = MediaPlayer?.PlaybackState is MediaPlaybackState.Playing or MediaPlaybackState.Opening;
+        bool needsReinit = item is not null && (_playerService?.AreSubtitleSettingsDirty() ?? false);
+
         SetCurrentItem(null);
         if (item is not null)
         {
             _bufferManager.CleanPlaybackItem(item);
         }
-        SetCurrentItem(item);
+
+        if (item is not null && resumePos > TimeSpan.Zero)
+        {
+            _pendingSeekItem = item;
+            _pendingSeekPosition = resumePos;
+        }
+        else
+        {
+            _pendingSeekItem = null;
+            _pendingSeekPosition = TimeSpan.Zero;
+        }
+
+        if (needsReinit && item is not null)
+        {
+            _delayPlay = () =>
+            {
+                SetCurrentItem(item, shouldPlay: wasPlaying);
+                return Task.CompletedTask;
+            };
+            Messenger.Send(new ReinitializePlayerMessage());
+            return;
+        }
+
+        SetCurrentItem(item, shouldPlay: wasPlaying);
     }
 
     #endregion
@@ -529,15 +491,12 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
             var newVms = expandedItems.Select(_mediaFactory.Create).ToList();
 
-            // Track whether the placeholder was the currently playing or targeted item before replacing.
             bool shouldAutoPlay = _context.CurrentItem == placeholder || _context.CurrentItem is null;
 
             if (ReplaceItemInQueue(placeholder, newVms))
             {
                 if (newVms.Count > 1 && (_queueSession.Origin is null || _queueSession.Origin.TrackItemsIndividually))
                 {
-                    // Upgrade the session origin before starting playback so ProcessCurrentItemChangedAsync
-                    // sees a collection origin and does not emit a separate SingleMedia session for newVms[0].
                     _queueSession.Origin = QueueOrigin.ForMediaCollection(placeholder.Name, placeholder.Location);
                     _context.ActiveOrigin = _queueSession.Origin;
                     bool isUpgrade = _queueSession.SessionId == _recordedSessionId &&
@@ -545,9 +504,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                     _recordedSessionId = _queueSession.SessionId;
                     _recordedOriginKind = RecentItemKind.MediaCollection;
 
-                    // ReplaceItemInQueue temporarily left _queueSession.CurrentIndex at -1 when removing the active
-                    // placeholder; construct the snapshot with newVms[0] as the active item so recent-media
-                    // tracking records the expanded item's actual queue position as InitialIndex.
                     MediaViewModel targetItem = shouldAutoPlay && _context.CurrentItem is null
                         ? newVms[0]
                         : (_context.CurrentItem ?? newVms[0]);
@@ -556,8 +512,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                         isUpgrade));
                 }
 
-                // Only start playback of the first child if the placeholder was the active/target item.
-                // If the user already switched to another track while expanding, preserve their current playback.
                 if (shouldAutoPlay)
                 {
                     await PlayAsync(newVms[0]);
@@ -594,8 +548,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                         bool isUpgrade = false;
                         if (shouldUpgradeOrigin)
                         {
-                            // Upgrade the session origin before calling SetCurrentItem so ProcessCurrentItemChangedAsync
-                            // sees TrackItemsIndividually == false and does not emit a duplicate SingleMedia session.
                             _queueSession.Origin = QueueOrigin.ForMediaCollection(vm.Name, vm.Location);
                             _context.ActiveOrigin = _queueSession.Origin;
                             isUpgrade = _queueSession.SessionId == _recordedSessionId &&
@@ -604,8 +556,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                             _recordedOriginKind = RecentItemKind.MediaCollection;
                         }
 
-                        // Select newVms[0] before broadcasting QueueSessionStartedMessage so _queueSession.CurrentIndex
-                        // and CurrentItem reflect the first expanded sub-item rather than -1 after removing vm.
                         SetCurrentItem(newVms[0], shouldPlay: true);
 
                         if (shouldUpgradeOrigin)
@@ -615,18 +565,14 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                     }
                 }
 
-                // ExpandSubItemsAsync may complete on a LibVLC native event thread (MediaParsedChanged);
-                // marshal queue mutation and VlcPlayer.Play() back onto the UI dispatcher thread.
                 _dispatcherQueue.TryExecuteOrEnqueue(ReplaceAndPlay);
             }
         }
         catch (ObjectDisposedException)
         {
-            // Expected if playback item was evicted from buffer or disposed while waiting
         }
         catch (OperationCanceledException)
         {
-            // Expected on timeout or cancellation
         }
         catch (Exception ex)
         {
@@ -634,10 +580,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
     }
 
-    /// <summary>
-    /// Updates transport controls navigation state and notifies subscribers that
-    /// <see cref="CanNext"/> or <see cref="CanPrevious"/> may have changed.
-    /// </summary>
     private void RaiseCanNavigateChanged()
     {
         _transportControlsService.TransportControls.IsNextEnabled = CanNext();
@@ -645,16 +587,27 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         Messenger.Send(new QueueCanNavigateChangedMessage());
     }
 
-    /// <summary>
-    /// Sets <see cref="PlayQueueContext.CurrentItem"/> and applies all associated side effects:
-    /// updating the media player's playback item, resetting the previous item's state,
-    /// updating <see cref="PlayQueueContext.CurrentIndex"/>, and broadcasting a
-    /// <see cref="QueueCurrentItemChangedMessage"/> via the messenger.
-    /// </summary>
     private void SetCurrentItem(MediaViewModel? value, bool shouldPlay = false)
     {
         void UpdateState()
         {
+            if (value is not null && !ReferenceEquals(value, _pendingSeekItem))
+            {
+                _pendingSeekItem = null;
+                _pendingSeekPosition = TimeSpan.Zero;
+            }
+
+            if (value is not null && MediaPlayer is not null && (_playerService?.AreSubtitleSettingsDirty() ?? false))
+            {
+                _delayPlay = () =>
+                {
+                    SetCurrentItem(value, shouldPlay);
+                    return Task.CompletedTask;
+                };
+                Messenger.Send(new ReinitializePlayerMessage());
+                return;
+            }
+
             if (MediaPlayer is not null)
             {
                 MediaPlayer.PlaybackItem = value is not null
@@ -691,8 +644,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                 }
             }
 
-            // Assign CurrentItem after updating PlaybackItem and CurrentIndex so
-            // OnContextPropertyChanged -> ProcessCurrentItemChangedAsync sees the updated state.
             _context.CurrentItem = value;
             _context.IsPlaying = MediaPlayer?.PlaybackState == MediaPlaybackState.Playing && value is not null;
             if (value is not null)
@@ -708,16 +659,9 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
             }
         }
 
-        // Marshal observable context updates, PlaybackItem assignment, and Play() to the UI thread
-        // so that PlaybackItem is always assigned before MediaPlayer.Play() and buffer updates run.
         _dispatcherQueue.TryExecuteOrEnqueue(UpdateState);
     }
 
-    /// <summary>
-    /// Performs asynchronous follow-up work after the current item changes:
-    /// breadcrumb logging, sub-item discovery, and concurrent updates to recent files,
-    /// transport controls display, and the media thumbnail buffer.
-    /// </summary>
     private async Task ProcessCurrentItemChangedAsync(MediaViewModel? value)
     {
         _currentItemCts?.Cancel();
@@ -779,7 +723,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
         catch (OperationCanceledException)
         {
-            // Cancelled because current item changed before completion
         }
         catch (Exception ex)
         {
@@ -787,12 +730,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
         }
     }
 
-    /// <summary>
-    /// Synchronizes <see cref="PlayQueueContext.Items"/> with <paramref name="playlist"/>
-    /// and updates the current item and command states.
-    /// Collection-changed events are deferred during this operation to avoid
-    /// redundant intermediate updates.
-    /// </summary>
     private void ApplyQueueSnapshot(QueueSession playlist, bool shouldPlay = false)
     {
         void UpdateQueue()
@@ -822,8 +759,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                 }
                 _context.ShuffleMode = playlist.ShuffleMode;
 
-                // Use efficient synchronization for small lists; fall back to a full
-                // clear-and-refill for large lists to keep the UI thread responsive.
                 if (_context.Items.Count < 200 && playlist.Items.Count < 200)
                 {
                     _context.Items.SyncItems(playlist.Items);
@@ -860,7 +795,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
             }
         }
 
-        // ObservableCollection mutations and subsequent SetCurrentItem/Play() must run on the UI thread.
         _dispatcherQueue.TryExecuteOrEnqueue(UpdateQueue);
     }
 
@@ -889,7 +823,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
             }
         }
 
-        // Ensure buffer disposal and ObservableCollection.Clear() run on the UI thread.
         _dispatcherQueue.TryExecuteOrEnqueue(Clear);
     }
 
@@ -897,7 +830,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
     {
         if (result.UpdatedQueue is not null)
         {
-            // Queue was replaced by neighboring-file navigation.
             ApplyQueueSnapshot(result.UpdatedQueue, shouldPlay: true);
         }
         else
@@ -910,9 +842,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     #region Playback State
 
-    /// <summary>
-    /// Gets the current immutable snapshot of queue session and playback state.
-    /// </summary>
     public QueuePlaybackState GetCurrentPlaybackState()
     {
         return new QueuePlaybackState(
@@ -938,9 +867,10 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     private void OnMediaFailed(IMediaPlayer sender, EventArgs args)
     {
-        // MediaFailed is raised on a LibVLC native event thread; marshal observable property updates to the UI thread.
         _dispatcherQueue.TryEnqueue(() =>
         {
+            _pendingSeekItem = null;
+            _pendingSeekPosition = TimeSpan.Zero;
             _context.IsPlaying = false;
             if (_context.CurrentItem is not null)
             {
@@ -954,10 +884,10 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     private void OnPlaybackStateChanged(IMediaPlayer sender, object args)
     {
-        // PlaybackStateChanged is raised on a LibVLC native event thread; marshal observable property updates to the UI thread.
         _dispatcherQueue.TryEnqueue(() =>
         {
-            bool isPlaying = sender.PlaybackState == MediaPlaybackState.Playing;
+            MediaPlaybackState state = sender.PlaybackState;
+            bool isPlaying = state == MediaPlaybackState.Playing;
             _context.IsPlaying = isPlaying;
 
             if (_context.CurrentItem is not null)
@@ -968,6 +898,20 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                 }
 
                 _context.CurrentItem.IsPlaying = isPlaying;
+
+                if (_pendingSeekItem is not null &&
+                    ReferenceEquals(_context.CurrentItem, _pendingSeekItem) &&
+                    state is MediaPlaybackState.Playing or MediaPlaybackState.Paused)
+                {
+                    TimeSpan targetPos = _pendingSeekPosition;
+                    _pendingSeekItem = null;
+                    _pendingSeekPosition = TimeSpan.Zero;
+
+                    if (targetPos > TimeSpan.Zero)
+                    {
+                        sender.Position = targetPos;
+                    }
+                }
             }
 
             BroadcastPlaybackState();
@@ -976,9 +920,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     private async void OnEndReached(IMediaPlayer sender, object? args)
     {
-        // MediaEnded is raised on LibVLC's EndReached native callback thread while LibVLC holds internal locks.
-        // Escape the native event thread via Task.Run before calling Position or advancing playback
-        // to avoid a LibVLC re-entrancy deadlock.
         await Task.Run(async () =>
         {
             try
@@ -990,7 +931,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
                 }
                 else if (_context.RepeatMode == MediaPlaybackAutoRepeatMode.Track)
                 {
-                    // Track repeat — restart from the beginning.
                     sender.Position = TimeSpan.Zero;
                 }
             }
@@ -1003,8 +943,6 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
 
     private void TransportControlsOnButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
     {
-        // SystemMediaTransportControls events fire on a background MTA worker thread;
-        // marshal to the UI thread so playlist navigation and MediaPlayer calls stay thread-safe.
         _dispatcherQueue.TryEnqueue(async () =>
         {
             try
@@ -1030,24 +968,14 @@ public sealed partial class PlayQueueCoordinator : ObservableRecipient, IPlayQue
     {
         void Update()
         {
-            // Update context directly (the coordinator will react via OnContextPropertyChanged).
             _context.RepeatMode = args.RequestedAutoRepeatMode;
         }
 
-        // SystemMediaTransportControls events fire on a background MTA worker thread;
-        // marshal observable context updates to the UI thread.
         _dispatcherQueue.TryExecuteOrEnqueue(Update);
     }
 
-    /// <summary>
-    /// Keeps the internal <see cref="_queueSession"/> model in sync with the observable
-    /// <see cref="PlayQueueContext.Items"/> collection and updates shuffle backup bookkeeping
-    /// when shuffle mode is active.
-    /// </summary>
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Skip intermediate updates during bulk operations — ApplyQueueSnapshot calls
-        // NotifyCanExecuteChanged explicitly at the end.
         if (_deferCollectionChanged) return;
 
         if (_context.Items.Count == 0)

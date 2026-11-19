@@ -31,6 +31,8 @@ body {
   border: solid 1px rgb(0 0 0 / 50%);
   width: 15vw;
   height: 15vw;
+  object-fit: cover;
+  object-position: center;
   box-shadow: 3px 3px 18px var(--shadowColor);
   border-radius: 2.5%;
 }
