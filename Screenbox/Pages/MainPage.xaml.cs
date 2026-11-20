@@ -89,6 +89,7 @@ public sealed partial class MainPage : Page, IContentFrame
         ContentFrame.Navigate(pageType, parameter, new SuppressNavigationTransitionInfo());
     }
 
+    [DynamicWindowsRuntimeCast(typeof(Windows.UI.Xaml.Controls.NavigationViewDisplayMode))]
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
         Window.Current.Dispatcher.AcceleratorKeyActivated += CoreDispatcher_AcceleratorKeyActivated;
